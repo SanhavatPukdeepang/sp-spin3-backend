@@ -10,6 +10,7 @@ const menuSchema = new mongoose.Schema(
     price: {
       type: Number,
       min: [0, "ราคาต้องไม่ติดลบ"],
+      required: [true, "กรุณาระบุราคา"],
     },
     quantity: {
       type: Number,
@@ -21,14 +22,16 @@ const menuSchema = new mongoose.Schema(
       type: String,
       required: [true, "ระบุประเภท"],
       enum: ["main", "side", "dessert", "drink"],
+      require: true,
     },
     avaiable_count: {
       type: String,
       default: true,
+      default: 0
     },
     avaiable_count: {
       type: Boolean,
-      default: false,
+      default: true,
     },
   },
 
