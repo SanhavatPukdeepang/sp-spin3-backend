@@ -8,7 +8,7 @@ try{
     console.log("MongoDB connected")
 
 }catch(err){
-    console.error("mongodb connection error");
+    console.error("MongoDB connection error:", err.message);
     
 }
 

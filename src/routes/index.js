@@ -1,6 +1,6 @@
-import { Router } from "express";
-import{router as v1Routes} from "./v1/index.js";
+import express from 'express'
+import authRouter from './auth.js'
 
+export const router = express.Router()
 
-export const router=Router();
-router.use("/v1",v1Routes);
+router.use('/auth', authRouter)
