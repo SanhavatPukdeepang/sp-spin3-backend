@@ -1,58 +1,31 @@
-
-###Get Menu
-GET http://localhost:5000/api/v1/menu
-
-###Create Menu
-POST http://localhost:5000/api/v1/menu
-Content-Type: application/json
-
-{
-    "name": "test menu",
-    "price": 100,
-    "quantity": 10,
-    "category": "main",
-    "active_status": true
-}
-
-
-###update Menu
-PUT  http://localhost:5000/api/v1/menu/
-Content-Type: application/json
-
-{
-    "name": "test menu",
-    "price": 100,
-    "quantity": 10,
-    "category": "main",
-    "active_status": true
-}
-
-###delete Menu
-DELETE  http://localhost:3000/api/v1/menu/
-Content-Type: application/json
-
-{
-    "name": "test menu",
-    "price": 100,
-    "quantity": 10,
-    "category": "main",
-    "active_status": true
-}
-
-
-
-
 ###Get promotion
-GET http://localhost:3000/api/v1/promotion
+GET http://localhost:3000/api/promotion
 
 ###Create promotion
-POST http://localhost:3000/api/v1/promotion
+POST http://localhost:3000/api/promotion
 Content-Type: application/json
 
 {
-    "name": "test promotion",
-    "price": 100,
-    "quantity": 10,
-    "category": "main",
-    "active_status": true
+  "name": "Summer Sale 2026",
+  "type": "percentage",
+  "value": 15,
+  "date_from": "2026-06-01T00:00:00.000Z",
+  "date_to": "2026-06-30T23:59:59.000Z",
+  "active_status": true
 }
+
+### Update promotion
+PUT http://localhost:3000/api/promotion/6a17ce32ce187819e8799090
+Content-Type: application/json
+
+{
+"active_status": false,
+  "value": 20
+}
+
+
+###Delete promotion
+DELETE http://localhost:3000/api/promotion/6a17ce32ce187819e8799090
+
+
+
