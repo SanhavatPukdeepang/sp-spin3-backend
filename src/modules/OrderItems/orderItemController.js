@@ -101,8 +101,8 @@ export const deleteOrderItem = async (req, res, next) => {
 };
 
 // Map routes to router for backward compatibility or direct routing
-// router.get("/", getOrderItems);
-// router.get("/:id", getOrderItemById);
-// router.post("/", createOrderItem);
-// router.put("/:id", updateOrderItem);
-// router.delete("/:id", deleteOrderItem);
+router.get("/", getOrderItems);
+router.get("/:id", getOrderItemById);
+router.post("/", createOrderItem);
+router.put("/:id", updateOrderItem);
+router.delete("/:id", deleteOrderItem);
