@@ -5,5 +5,5 @@ import { router as menuRouter } from "./menuRoute.js";
 
 export const router = Router();
 
-router.use("/user", usersRoute);
-router.use("/menu", menuRouter);
+router.use("v1/user", usersRoute);
+router.use("v1/menu", menuRouter);
