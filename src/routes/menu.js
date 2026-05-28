@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { Menu } from '../modules/Menus/Menu.js';
+import { Menu } from '../modules/menus/Menu.js';
 
 export const router = Router();
 
