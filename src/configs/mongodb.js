@@ -4,7 +4,7 @@ export async function connectDB() {
 
 const uri =process.env.MONGODB_URI;
 try{
-    await mongoose.connect(uri);
+    await mongoose.connect(uri,{dbName: "serious-spin3"});
     console.log("MongoDB connected")
 
 }catch(err){

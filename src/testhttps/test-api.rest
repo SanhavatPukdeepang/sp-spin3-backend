@@ -1,53 +1,7 @@
-
-
-
-### Get all orders
-GET http://localhost:5000/api/orders
-
-### Get order by id
-GET http://localhost:5000/api/orders/6a1821d57ec678338b0da00b
-
-### Create order
-POST http://localhost:5000/api/orders
+POST http://localhost:5000/api/auth/login
 Content-Type: application/json
 
 {
-  "type": "delivery",
-  "customer": {
-    "name": "Jane Doe",
-    "contact": "+15551234567",
-    "address": "123 Main St, Anytown",
-    "note": "Leave at the door"
-  },
-  "orderList": [
-    {
-      "menu_id": "650000000000000000000001",
-      "quantity": 2,
-      "price_at_purchase": 12.5
-    },
-    {
-      "menu_id": "650000000000000000000002",
-      "quantity": 1,
-      "price_at_purchase": 8.75
-    }
-  ]
+  "email": "cook@gmail.com",
+  "password": "cook123"
 }
-
-### Update order item status
-PUT http://localhost:5000/api/orders/6a1821d57ec678338b0da00b/item/6a1821d57ec678338b0da00c
-Content-Type: application/json
-
-{
-  "status": "preparing"
-}
-
-### Update order status
-PUT http://localhost:5000/api/orders/6a1821d57ec678338b0da00b
-Content-Type: application/json
-
-{
-  "status": "completed"
-}
-
-
-
