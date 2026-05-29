@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Promotion } from '../modules/promotions/Promotion.js';
-import { createPromotion, deletePromotion, getPromotionById, getPromotions, updatePromotion } from '../modules/controller/promotitonController.js';
+import { createPromotion, deletePromotion, getPromotionById, getPromotions, updatePromotion } from '../modules/promotions/promotionController.js';
 
 export const router = Router();
 

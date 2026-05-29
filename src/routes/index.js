@@ -10,5 +10,5 @@ export const router = Router();
 router.use('/auth', authRouter);
 router.use('/orders', orderRouter);
 router.use('/payments', paymentRouter);
-router.use('/menu', menuRouter);
+router.use('/menus', menuRouter);
 router.use('/promotion', promotionRouter);

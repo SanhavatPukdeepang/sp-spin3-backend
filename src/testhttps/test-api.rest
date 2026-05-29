@@ -1,31 +1,53 @@
-###Get promotion
-GET http://localhost:3000/api/promotion
 
-###Create promotion
-POST http://localhost:3000/api/promotion
+
+
+### Get all orders
+GET http://localhost:5000/api/orders
+
+### Get order by id
+GET http://localhost:5000/api/orders/6a1821d57ec678338b0da00b
+
+### Create order
+POST http://localhost:5000/api/orders
 Content-Type: application/json
 
 {
-  "name": "Summer Sale 2026",
-  "type": "percentage",
-  "value": 15,
-  "date_from": "2026-06-01T00:00:00.000Z",
-  "date_to": "2026-06-30T23:59:59.000Z",
-  "active_status": true
+  "type": "delivery",
+  "customer": {
+    "name": "Jane Doe",
+    "contact": "+15551234567",
+    "address": "123 Main St, Anytown",
+    "note": "Leave at the door"
+  },
+  "orderList": [
+    {
+      "menu_id": "650000000000000000000001",
+      "quantity": 2,
+      "price_at_purchase": 12.5
+    },
+    {
+      "menu_id": "650000000000000000000002",
+      "quantity": 1,
+      "price_at_purchase": 8.75
+    }
+  ]
 }
 
-### Update promotion
-PUT http://localhost:3000/api/promotion/6a17ce32ce187819e8799090
+### Update order item status
+PUT http://localhost:5000/api/orders/6a1821d57ec678338b0da00b/item/6a1821d57ec678338b0da00c
 Content-Type: application/json
 
 {
-"active_status": false,
-  "value": 20
+  "status": "preparing"
 }
 
+### Update order status
+PUT http://localhost:5000/api/orders/6a1821d57ec678338b0da00b
+Content-Type: application/json
 
-###Delete promotion
-DELETE http://localhost:3000/api/promotion/6a17ce32ce187819e8799090
+{
+  "status": "completed"
+}
 
 
 

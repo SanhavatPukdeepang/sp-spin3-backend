@@ -1,0 +1,252 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "fe-title",
+      "type": "text",
+      "x": 20,
+      "y": 50,
+      "width": 250,
+      "height": 40,
+      "text": "FRONTEND (React Apps)",
+      "fontSize": 24,
+      "fontFamily": 1,
+      "strokeColor": "#242424"
+    },
+    {
+      "id": "customer-box",
+      "type": "rectangle",
+      "x": 20,
+      "y": 120,
+      "width": 220,
+      "height": 150,
+      "backgroundColor": "#fff5f5",
+      "strokeColor": "#e4002b",
+      "roundness": { "type": 3 },
+      "boundElements": [{ "type": "text", "id": "customer-text" }]
+    },
+    {
+      "id": "customer-text",
+      "type": "text",
+      "x": 30,
+      "y": 140,
+      "width": 200,
+      "height": 110,
+      "text": "CUSTOMER APP\n(Vite 6, Tailwind 4)\n- ShopContext\n- orderService\n- api.js (Port 5173)",
+      "fontSize": 16,
+      "textAlign": "center",
+      "containerId": "customer-box"
+    },
+    {
+      "id": "owner-box",
+      "type": "rectangle",
+      "x": 20,
+      "y": 300,
+      "width": 220,
+      "height": 150,
+      "backgroundColor": "#e7f3ff",
+      "strokeColor": "#0078d4",
+      "roundness": { "type": 3 },
+      "boundElements": [{ "type": "text", "id": "owner-text" }]
+    },
+    {
+      "id": "owner-text",
+      "type": "text",
+      "x": 30,
+      "y": 320,
+      "width": 200,
+      "height": 110,
+      "text": "OWNER APP\n(Vite, Tailwind 3)\n- AuthContext\n- stock.js / staff.js\n- api.js (Port 5174)",
+      "fontSize": 16,
+      "textAlign": "center",
+      "containerId": "owner-box"
+    },
+    {
+      "id": "be-title",
+      "type": "text",
+      "x": 500,
+      "y": 50,
+      "width": 250,
+      "height": 40,
+      "text": "BACKEND (Express API)",
+      "fontSize": 24,
+      "fontFamily": 1,
+      "strokeColor": "#242424"
+    },
+    {
+      "id": "be-router",
+      "type": "rectangle",
+      "x": 500,
+      "y": 120,
+      "width": 220,
+      "height": 80,
+      "backgroundColor": "#f8f9fa",
+      "strokeColor": "#242424",
+      "roundness": { "type": 3 },
+      "boundElements": [{ "type": "text", "id": "be-router-text" }]
+    },
+    {
+      "id": "be-router-text",
+      "type": "text",
+      "x": 510,
+      "y": 135,
+      "width": 200,
+      "height": 50,
+      "text": "ROUTING LAYER\n(index.js -> Feature Routes)",
+      "fontSize": 16,
+      "textAlign": "center",
+      "containerId": "be-router"
+    },
+    {
+      "id": "be-middleware",
+      "type": "rectangle",
+      "x": 500,
+      "y": 220,
+      "width": 220,
+      "height": 60,
+      "backgroundColor": "#fff4ce",
+      "strokeColor": "#856404",
+      "roundness": { "type": 3 },
+      "boundElements": [{ "type": "text", "id": "be-middleware-text" }]
+    },
+    {
+      "id": "be-middleware-text",
+      "type": "text",
+      "x": 510,
+      "y": 230,
+      "width": 200,
+      "height": 40,
+      "text": "MIDDLEWARE\n(isAuth, isEligible)",
+      "fontSize": 16,
+      "textAlign": "center",
+      "containerId": "be-middleware"
+    },
+    {
+      "id": "be-ctrl",
+      "type": "rectangle",
+      "x": 500,
+      "y": 300,
+      "width": 220,
+      "height": 80,
+      "backgroundColor": "#f8f9fa",
+      "strokeColor": "#242424",
+      "roundness": { "type": 3 },
+      "boundElements": [{ "type": "text", "id": "be-ctrl-text" }]
+    },
+    {
+      "id": "be-ctrl-text",
+      "type": "text",
+      "x": 510,
+      "y": 315,
+      "width": 200,
+      "height": 50,
+      "text": "CONTROLLERS\n(Feature Logic)",
+      "fontSize": 16,
+      "textAlign": "center",
+      "containerId": "be-ctrl"
+    },
+    {
+      "id": "be-model",
+      "type": "rectangle",
+      "x": 500,
+      "y": 400,
+      "width": 220,
+      "height": 80,
+      "backgroundColor": "#f8f9fa",
+      "strokeColor": "#242424",
+      "roundness": { "type": 3 },
+      "boundElements": [{ "type": "text", "id": "be-model-text" }]
+    },
+    {
+      "id": "be-model-text",
+      "type": "text",
+      "x": 510,
+      "y": 415,
+      "width": 200,
+      "height": 50,
+      "text": "MODELS\n(Mongoose Schemas)",
+      "fontSize": 16,
+      "textAlign": "center",
+      "containerId": "be-model"
+    },
+    {
+      "id": "db-title",
+      "type": "text",
+      "x": 800,
+      "y": 400,
+      "width": 150,
+      "height": 80,
+      "text": "DATABASE\n(MongoDB Atlas\n@ Port 27017)",
+      "fontSize": 20,
+      "fontFamily": 1,
+      "strokeColor": "#47A248",
+      "textAlign": "center"
+    },
+    {
+      "id": "arrow-net-1",
+      "type": "arrow",
+      "x": 240,
+      "y": 200,
+      "width": 260,
+      "height": -40,
+      "strokeColor": "#DC5F00",
+      "points": [[0, 0], [130, 0], [130, -40], [260, -40]],
+      "text": "API CALL (Port 5000)"
+    },
+    {
+      "id": "arrow-net-2",
+      "type": "arrow",
+      "x": 240,
+      "y": 375,
+      "width": 260,
+      "height": -215,
+      "strokeColor": "#DC5F00",
+      "points": [[0, 0], [130, 0], [130, -215], [260, -215]]
+    },
+    {
+      "id": "arrow-be-1",
+      "type": "arrow",
+      "x": 610,
+      "y": 200,
+      "width": 0,
+      "height": 20,
+      "strokeColor": "#242424",
+      "points": [[0, 0], [0, 20]]
+    },
+    {
+      "id": "arrow-be-2",
+      "type": "arrow",
+      "x": 610,
+      "y": 280,
+      "width": 0,
+      "height": 20,
+      "strokeColor": "#242424",
+      "points": [[0, 0], [0, 20]]
+    },
+    {
+      "id": "arrow-be-3",
+      "type": "arrow",
+      "x": 610,
+      "y": 380,
+      "width": 0,
+      "height": 20,
+      "strokeColor": "#242424",
+      "points": [[0, 0], [0, 20]]
+    },
+    {
+      "id": "arrow-db",
+      "type": "arrow",
+      "x": 720,
+      "y": 440,
+      "width": 80,
+      "height": 0,
+      "strokeColor": "#47A248",
+      "points": [[0, 0], [80, 0]]
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#ffffff"
+  }
+}

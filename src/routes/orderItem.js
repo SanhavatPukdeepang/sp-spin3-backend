@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { OrderItem } from '../modules/orderItems/OrderItem.js';
-import { createOrderItem, deleteOrderItem, getOrderItemById, getOrderItems, updateOrderItem } from '../modules/controller/oderItemContrller.js';
+import { createOrderItem, deleteOrderItem, getOrderItemById, getOrderItems, updateOrderItem } from '../modules/orderItems/orderItemController.js';
 
 
 export const router = Router();
