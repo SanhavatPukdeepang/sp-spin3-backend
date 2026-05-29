@@ -3,6 +3,12 @@ import { Ingredient } from '../ingredients/Ingredient.js';
 import { Menu } from '../menus/Menu.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
 
+const normalizeOrderItemQuantity = (quantity) => {
+  const numericQuantity = Number(quantity);
+  if (!Number.isFinite(numericQuantity) || numericQuantity < 1) return 1;
+  return Math.trunc(numericQuantity);
+};
+
 const buildIngredientRequirements = async (orderList = []) => {
   const requirements = new Map();
   const menuIds = [
@@ -23,7 +29,7 @@ const buildIngredientRequirements = async (orderList = []) => {
     const menu = menuMap.get(String(item.menu_id || ''));
     if (!menu) return;
 
-    const orderQuantity = Number(item.quantity || 1);
+    const orderQuantity = normalizeOrderItemQuantity(item.quantity);
     menu.ingredients.forEach((entry) => {
       const ingredient = entry.ingredient;
       if (!ingredient) return;
@@ -86,13 +92,20 @@ export const getOrderById = async (req, res) => {
 
 export const createOrder = async (req, res) => {
   try {
-    const requirements = await buildIngredientRequirements(req.body.orderList || []);
+    const orderList = Array.isArray(req.body.orderList)
+      ? req.body.orderList.map((item) => ({
+          ...item,
+          quantity: normalizeOrderItemQuantity(item.quantity),
+        }))
+      : [];
+
+    const requirements = await buildIngredientRequirements(orderList);
     const stockError = validateIngredientRequirements(requirements);
     if (stockError) {
       return res.status(400).json({ message: stockError });
     }
 
-    const order = new Order(req.body);
+    const order = new Order({ ...req.body, orderList });
     const newOrder = await order.save();
     await deductIngredientRequirements(requirements);
     await broadcastIngredientSnapshot();

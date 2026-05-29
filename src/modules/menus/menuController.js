@@ -1,6 +1,43 @@
 import { Menu } from './Menu.js';
 import { MenuLog } from './MenuLog.js';
+import { Ingredient } from '../ingredients/Ingredient.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
+
+const countBasedUnits = new Set(['piece', 'pieces', 'jar', 'jars', 'bottle', 'bottles']);
+
+const normalizeMenuIngredientQuantity = (quantity, unit = '') => {
+  const numericQuantity = Number(quantity);
+  if (!Number.isFinite(numericQuantity) || numericQuantity <= 0) return 1;
+  if (countBasedUnits.has(String(unit).toLowerCase())) {
+    return Math.max(1, Math.round(numericQuantity));
+  }
+  return numericQuantity;
+};
+
+const sanitizeMenuIngredients = async (ingredients = []) => {
+  if (!Array.isArray(ingredients)) return ingredients;
+
+  const ingredientIds = [
+    ...new Set(
+      ingredients
+        .map((entry) => entry?.ingredient)
+        .filter(Boolean)
+        .map((ingredientId) => String(ingredientId)),
+    ),
+  ];
+  const ingredientDocs = await Ingredient.find({ _id: { $in: ingredientIds } });
+  const ingredientById = new Map(ingredientDocs.map((ingredient) => [String(ingredient._id), ingredient]));
+
+  return ingredients
+    .filter((entry) => entry?.ingredient)
+    .map((entry) => {
+      const ingredient = ingredientById.get(String(entry.ingredient));
+      return {
+        ingredient: entry.ingredient,
+        quantity: normalizeMenuIngredientQuantity(entry.quantity, ingredient?.unit),
+      };
+    });
+};
 
 const withStockStatus = (menu) => {
   const item = menu.toObject ? menu.toObject() : menu;
@@ -85,7 +122,15 @@ export const createMenu = async (req, res) => {
   }
 
   try {
-    const menu = new Menu({ name, description, price, image, category, cookingTime, ingredients });
+    const menu = new Menu({
+      name,
+      description,
+      price,
+      image,
+      category,
+      cookingTime,
+      ingredients: ingredients === undefined ? ingredients : await sanitizeMenuIngredients(ingredients),
+    });
     const newMenu = await menu.save();
 
     await MenuLog.create({
@@ -115,7 +160,7 @@ export const updateMenu = async (req, res) => {
     if (image !== undefined) menu.image = image;
     if (category !== undefined) menu.category = category;
     if (cookingTime !== undefined) menu.cookingTime = cookingTime;
-    if (ingredients !== undefined) menu.ingredients = ingredients;
+    if (ingredients !== undefined) menu.ingredients = await sanitizeMenuIngredients(ingredients);
 
     if (available !== undefined) {
       const changed = menu.available !== available;
@@ -147,12 +192,7 @@ export const updateMenuIngredients = async (req, res) => {
       return res.status(400).json({ message: 'Ingredients must be an array' });
     }
 
-    const sanitizedIngredients = ingredients
-      .filter((entry) => entry?.ingredient)
-      .map((entry) => ({
-        ingredient: entry.ingredient,
-        quantity: Number(entry.quantity) > 0 ? Number(entry.quantity) : 1,
-      }));
+    const sanitizedIngredients = await sanitizeMenuIngredients(ingredients);
 
     const menu = await Menu.findById(req.params.id);
     if (!menu) return res.status(404).json({ message: 'Menu item not found' });

@@ -6,6 +6,17 @@ import { Menu } from './src/modules/menus/Menu.js';
 
 dotenv.config();
 
+const countBasedUnits = new Set(['piece', 'pieces', 'jar', 'jars', 'bottle', 'bottles']);
+
+const normalizeRecipeQuantity = (quantity, unit = '') => {
+  const numericQuantity = Number(quantity);
+  if (!Number.isFinite(numericQuantity) || numericQuantity <= 0) return 1;
+  if (countBasedUnits.has(String(unit).toLowerCase())) {
+    return Math.max(1, Math.round(numericQuantity));
+  }
+  return numericQuantity;
+};
+
 const menuRecipes = {
   'Signature 8pc Bucket': [
     ['Chicken Drumsticks', 1.6],
@@ -182,9 +193,7 @@ async function updateMenuIngredients() {
     await connectDB();
 
     const ingredients = await Ingredient.find();
-    const ingredientByName = new Map(
-      ingredients.map((ingredient) => [ingredient.name, ingredient._id]),
-    );
+    const ingredientByName = new Map(ingredients.map((ingredient) => [ingredient.name, ingredient]));
 
     let updatedCount = 0;
     const missingIngredients = new Set();
@@ -197,7 +206,10 @@ async function updateMenuIngredients() {
             missingIngredients.add(ingredientName);
             return null;
           }
-          return { ingredient, quantity };
+          return {
+            ingredient: ingredient._id,
+            quantity: normalizeRecipeQuantity(quantity, ingredient.unit),
+          };
         })
         .filter(Boolean);
 
