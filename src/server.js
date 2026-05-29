@@ -14,6 +14,7 @@ const allowedOrigins = [
   'http://localhost:5174',
   'https://spc-owner.vercel.app',
   'https://spc-customer.vercel.app',
+  'https://sp-spin3-frontend.vercel.app/'
 ]
 
 app.use(cors({
