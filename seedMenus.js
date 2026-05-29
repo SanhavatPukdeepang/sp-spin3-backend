@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import { Menu } from './src/modules/Menus/Menu.js';
 import { connectDB } from './src/configs/mongodb.js';
 
-// dotenv.config();
+dotenv.config();
 
 const menuItems = [
   // CHICKEN
@@ -75,28 +75,28 @@ const menuItems = [
 //   { name: 'Chickskate Set', description: 'Try me -5%', price: 189, image: '', category: 'combo', cookingTime: 600 },
 // ]
 
-// async function seedMenus() {
-//   try {
-//     await connectDB();
-//     console.log('Connected to database');
+async function seedMenus() {
+  try {
+    await connectDB();
+    console.log('Connected to database');
 
-//     // Clear existing menus
-//     await Menu.deleteMany({});
-//     console.log('Cleared existing menus');
+    // Clear existing menus
+    await Menu.deleteMany({});
+    console.log('Cleared existing menus');
 
-//     // Insert new menus
-//     const result = await Menu.insertMany(menuItems);
-//     console.log(`✅ Seeded ${result.length} menu items`);
+    // Insert new menus
+    const result = await Menu.insertMany(menuItems);
+    console.log(`✅ Seeded ${result.length} menu items`);
     
-//     result.forEach(item => {
-//       console.log(`  - ${item.name} (${item.cookingTime}s cooking time)`);
-//     });
+    result.forEach(item => {
+      console.log(`  - ${item.name} (${item.cookingTime}s cooking time)`);
+    });
 
-//   } catch (err) {
-//     console.error('❌ Seed error:', err.message);
-//   } finally {
-//     process.exit(0);
-//   }
-// }
+  } catch (err) {
+    console.error('❌ Seed error:', err.message);
+  } finally {
+    process.exit(0);
+  }
+}
 
-// seedMenus();
+seedMenus();
