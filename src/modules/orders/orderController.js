@@ -33,15 +33,18 @@ export const updateOrderItemStatus = async (req, res) => {
   try {
     const { orderId, itemId } = req.params;
     const { status } = req.body;
+    const allowedStatuses = ['InKitchen', 'Cook', 'finished', 'cancel', 'pending', 'preparing', 'completed', 'cancelled'];
 
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ message: 'Invalid item status' });
+    }
 
-    const item = order.orderList.id(itemId);
-    if (!item) return res.status(404).json({ message: 'Item not found' });
-
-    item.status = status;
-    await order.save();
+    const order = await Order.findOneAndUpdate(
+      { _id: orderId, 'orderList._id': itemId },
+      { $set: { 'orderList.$.status': status } },
+      { new: true }
+    );
+    if (!order) return res.status(404).json({ message: 'Order or item not found' });
 
     res.json(order);
   } catch (err) {
@@ -54,7 +57,7 @@ export const updateOrderStatus = async (req, res) => {
     const updatedOrder = await Order.findByIdAndUpdate(
       req.params.id,
       { status: req.body.status },
-      { validateBeforeSave: true, returnDocument: 'after' }
+      { new: true }
     );
     res.json(updatedOrder);
   } catch (err) {

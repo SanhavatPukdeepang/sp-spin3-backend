@@ -10,6 +10,12 @@ const orderSchema = new mongoose.Schema({
     note: { type: String }
   },
   orderList: [embeddedOrderItemSchema],
+  payment: {
+    method: { type: String },
+    amount: { type: Number },
+    transactionId: { type: String },
+    paidAt: { type: Date }
+  },
   status: { 
     type: String, 
     enum: ['pending', 'preparing', 'completed', 'cancelled'], 

@@ -68,7 +68,7 @@ export const createPromotion = async (req, res, next) => {
 export const updatePromotion = async (req, res, next) => {
   try {
     const doc = await Promotion.findByIdAndUpdate(req.params.id, req.body, {
-      returnDocument: "after",
+      new: true,
       runValidators: true,
     });
 
