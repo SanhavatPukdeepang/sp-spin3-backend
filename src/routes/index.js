@@ -4,6 +4,7 @@ import { router as orderRouter } from './order.js';
 import { router as paymentRouter } from './payment.js';
 import { router as menuRouter } from './menu.js';
 import { router as promotionRouter } from './promotion.js';
+import { router as ingredientRouter } from './ingredient.js';
 
 export const router = Router();
 
@@ -12,3 +13,4 @@ router.use('/orders', orderRouter);
 router.use('/payments', paymentRouter);
 router.use('/menus', menuRouter);
 router.use('/promotion', promotionRouter);
+router.use('/ingredients', ingredientRouter);

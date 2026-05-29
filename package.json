@@ -9,7 +9,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "node --env-file=.env  --watch src/server.js",
-    "start": "node --watch src/server.js"
+    "start": "node --watch src/server.js",
+    "seed:ingredients": "node --env-file=.env seedIngredients.js",
+    "seed:menus": "node --env-file=.env seedMenus.js",
+    "seed:orders": "node --env-file=.env seedOrders.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
