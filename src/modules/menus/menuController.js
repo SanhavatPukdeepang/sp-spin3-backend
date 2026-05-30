@@ -2,6 +2,7 @@ import { Menu } from './Menu.js';
 import { MenuLog } from './MenuLog.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
+import { broadcastSSE } from '../../utils/sse.js';
 
 const countBasedUnits = new Set(['piece', 'pieces', 'jar', 'jars', 'bottle', 'bottles']);
 
@@ -15,11 +16,20 @@ const normalizeMenuIngredientQuantity = (quantity, unit = '') => {
 };
 
 const sanitizeMenuIngredients = async (ingredients = []) => {
-  if (!Array.isArray(ingredients)) return ingredients;
+  let parsedIngredients = ingredients;
+  if (typeof ingredients === 'string') {
+    try {
+      parsedIngredients = JSON.parse(ingredients);
+    } catch (err) {
+      parsedIngredients = [];
+    }
+  }
+
+  if (!Array.isArray(parsedIngredients)) return [];
 
   const ingredientIds = [
     ...new Set(
-      ingredients
+      parsedIngredients
         .map((entry) => entry?.ingredient)
         .filter(Boolean)
         .map((ingredientId) => String(ingredientId)),
@@ -28,7 +38,7 @@ const sanitizeMenuIngredients = async (ingredients = []) => {
   const ingredientDocs = await Ingredient.find({ _id: { $in: ingredientIds } });
   const ingredientById = new Map(ingredientDocs.map((ingredient) => [String(ingredient._id), ingredient]));
 
-  return ingredients
+  return parsedIngredients
     .filter((entry) => entry?.ingredient)
     .map((entry) => {
       const ingredient = ingredientById.get(String(entry.ingredient));
@@ -113,7 +123,8 @@ export const getMenuLogs = async (req, res) => {
 };
 
 export const createMenu = async (req, res) => {
-  const { name, description, price, image, category, cookingTime, ingredients } = req.body;
+  const { name, description, price, category, cookingTime, ingredients } = req.body;
+  let image = req.file ? req.file.path : (req.body.image || undefined);
 
   if (!name || price === undefined || !category) {
     return res.status(400).json({
@@ -125,11 +136,11 @@ export const createMenu = async (req, res) => {
     const menu = new Menu({
       name,
       description,
-      price,
+      price: Number(price),
       image,
       category,
-      cookingTime,
-      ingredients: ingredients === undefined ? ingredients : await sanitizeMenuIngredients(ingredients),
+      cookingTime: Number(cookingTime) || 0,
+      ingredients: ingredients === undefined ? [] : await sanitizeMenuIngredients(ingredients),
     });
     const newMenu = await menu.save();
 
@@ -149,25 +160,31 @@ export const createMenu = async (req, res) => {
 
 export const updateMenu = async (req, res) => {
   try {
-    const { name, description, price, image, category, cookingTime, available, ingredients } = req.body;
+    const { name, description, price, category, cookingTime, available, ingredients } = req.body;
+    let image = req.body.image;
+
+    if (req.file) {
+      image = req.file.path;
+    }
 
     const menu = await Menu.findById(req.params.id);
     if (!menu) return res.status(404).json({ message: 'Menu item not found' });
 
     if (name !== undefined) menu.name = name;
     if (description !== undefined) menu.description = description;
-    if (price !== undefined) menu.price = price;
+    if (price !== undefined) menu.price = Number(price);
     if (image !== undefined) menu.image = image;
     if (category !== undefined) menu.category = category;
-    if (cookingTime !== undefined) menu.cookingTime = cookingTime;
+    if (cookingTime !== undefined) menu.cookingTime = Number(cookingTime);
     if (ingredients !== undefined) menu.ingredients = await sanitizeMenuIngredients(ingredients);
 
     if (available !== undefined) {
-      const changed = menu.available !== available;
-      menu.available = available;
+      const isAvailable = available === 'true' || available === true;
+      const changed = menu.available !== isAvailable;
+      menu.available = isAvailable;
       if (changed) {
         await MenuLog.create({
-          action: available ? 'activated' : 'deactivated',
+          action: isAvailable ? 'activated' : 'deactivated',
           menuId: menu._id,
           menuName: menu.name,
           performedBy: req.user?.name || req.user?.email || 'owner',

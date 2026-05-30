@@ -19,7 +19,7 @@ const menuSchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      default: '',
+      default: 'https://placehold.co/600x400/e4002b/ffffff?text=Serious+Fried+Chicken',
     },
     category: {
       type: String,
