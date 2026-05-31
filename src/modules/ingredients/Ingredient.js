@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const ingredienSchema = new mongoose.Schema(
   {
     ingredient_index: { type: Number, required: true, default: 0 },
-    name: { type: String, required: true },
+    name: { type: String, required: true, trim: true, unique: true },
     quantity: { type: Number, required: true, default: 0 },
     unit: { type: String, required: true }, // เช่น kg, grams, liters
     price_per_unit: { type: Number, required: true },

@@ -7,27 +7,50 @@ import {
   updateIngredientStock,
   decreaseIngredientStock,
   createIngredient,
+  getIngredientLots,
+  addIngredientStock,
+  expireIngredientLot,
+  updateIngredientLot,
+  deleteIngredientLot,
 } from '../modules/ingredients/ingredientController.js';
+import { isAuth, isEligible } from '../middleware/auth.js';
 
 export const router = Router();
 
+const kitchenStockAccess = [isAuth, isEligible('owner', 'cook')];
+
 // GET all ingredients
-router.get('/', getAllIngredients);
+router.get('/', kitchenStockAccess, getAllIngredients);
+
+// GET batches for an ingredient
+router.get('/:id/batches', kitchenStockAccess, getIngredientLots);
+
+// POST add stock batch (increment)
+router.post('/:id/stock', kitchenStockAccess, addIngredientStock);
+
+// PUT expire a specific lot
+router.put('/:id/lots/:lotId/expire', kitchenStockAccess, expireIngredientLot);
+
+// PUT update a specific lot (direct edit)
+router.put('/:id/lots/:lotId', kitchenStockAccess, updateIngredientLot);
+
+// DELETE a specific lot
+router.delete('/:id/lots/:lotId', kitchenStockAccess, deleteIngredientLot);
 
 // GET ingredients grouped by status (in_stock, low_stock, out_of_stock) - COOK BOARD
-router.get('/status/board', getIngredientsByStatus);
+router.get('/status/board', kitchenStockAccess, getIngredientsByStatus);
 
 // GET single ingredient
-router.get('/:id', getIngredient);
+router.get('/:id', kitchenStockAccess, getIngredient);
 
 // POST create ingredient
-router.post('/', createIngredient);
+router.post('/', kitchenStockAccess, createIngredient);
 
 // PUT update ingredient details
-router.put('/:id', updateIngredient);
+router.put('/:id', kitchenStockAccess, updateIngredient);
 
 // PUT update ingredient stock (set exact quantity)
-router.put('/:id/stock', updateIngredientStock);
+router.put('/:id/stock', kitchenStockAccess, updateIngredientStock);
 
 // PUT decrease ingredient stock (used when cooking)
-router.put('/:id/decrease', decreaseIngredientStock);
+router.put('/:id/decrease', kitchenStockAccess, decreaseIngredientStock);

@@ -6,6 +6,10 @@ const wasteSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Ingredient",
     },
+    ingredientLot: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "IngredientLot",
+    },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     itemName: { type: String, trim: true, default: "" },
     quantity: { type: Number, min: 0 },
@@ -21,8 +25,7 @@ const wasteSchema = new mongoose.Schema(
 );
 
 // Pre-save hook เพื่อคำนวณ total_cost
-wasteSchema.pre("save", async function (next) {
-  try {
+wasteSchema.pre("save", async function () {
     // คำนวณเฉพาะตอนสร้างใหม่ หรือมีการแก้ไขจำนวน quantity_wasted
     if (this.ingredient && (this.isModified("quantity_wasted") || this.isNew)) {
       const Ingredient = mongoose.model("Ingredient");
@@ -36,10 +39,6 @@ wasteSchema.pre("save", async function (next) {
         this.estimatedCost = this.estimatedCost ?? this.total_cost;
       }
     }
-    next();
-  } catch (error) {
-    next(error);
-  }
 });
 
 export const Waste = mongoose.model("Waste", wasteSchema);

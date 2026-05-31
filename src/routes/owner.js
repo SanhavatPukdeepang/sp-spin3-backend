@@ -2,11 +2,12 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { isAuth, isEligible } from '../middleware/auth.js';
 import { Ingredient } from '../modules/ingredients/Ingredient.js';
+import { IngredientLot } from '../modules/ingredients/IngredientLot.js';
 import { Order } from '../modules/orders/Order.js';
 import { Promotion } from '../modules/promotions/Promotion.js';
 import { User } from '../modules/users/User.js';
 import { Waste } from '../modules/wastes/Waste.js';
-import { processExpiredIngredientLots } from '../modules/ingredients/inventoryLifecycle.js';
+import { processExpiredIngredientLots, syncIngredientState, consumeFromLots } from '../modules/ingredients/inventoryLifecycle.js';
 
 export const router = Router();
 
@@ -148,7 +149,6 @@ router.get('/summary', ownerOnly, async (req, res) => {
 
 router.get('/stock', ownerOnly, async (req, res) => {
   try {
-    await processExpiredIngredientLots();
     const ingredients = await Ingredient.find().sort({ name: 1 });
     res.json(ingredients.map(toStockLot));
   } catch (err) {
@@ -158,23 +158,52 @@ router.get('/stock', ownerOnly, async (req, res) => {
 
 router.patch('/stock/:id', ownerOnly, async (req, res) => {
   try {
+    const ingredient = await Ingredient.findById(req.params.id);
+    if (!ingredient) return res.status(404).json({ message: 'Stock item not found' });
+
     const updates = {};
-    if (req.body.quantity !== undefined) updates.quantity = Number(req.body.quantity);
     if (req.body.price !== undefined) updates.price_per_unit = Number(req.body.price);
     if (req.body.reorderPoint !== undefined) updates.low_stock_threshold = Number(req.body.reorderPoint);
     if (req.body.active !== undefined) updates.active_status = Boolean(req.body.active);
-    if (req.body.expiryDate !== undefined) updates.expiryDate = req.body.expiryDate ? new Date(req.body.expiryDate) : null;
-    if (updates.quantity !== undefined && updates.quantity <= 0) updates.active_status = false;
-
-    const ingredient = await Ingredient.findById(req.params.id);
-
-    if (!ingredient) return res.status(404).json({ message: 'Stock item not found' });
+    
+    // Apply basic updates
     Object.assign(ingredient, updates);
-    if (ingredient.quantity > 0 && ingredient.expiryDate && ingredient.expiryDate > new Date()) {
-      ingredient.expiredAt = null;
+    await ingredient.save();
+
+    // Handle quantity and expiry changes via lots
+    if (req.body.quantity !== undefined || req.body.expiryDate !== undefined) {
+      const newQty = req.body.quantity !== undefined ? Number(req.body.quantity) : ingredient.quantity;
+      const newExpiry = req.body.expiryDate !== undefined ? (req.body.expiryDate ? new Date(req.body.expiryDate) : null) : ingredient.expiryDate;
+
+      const diff = newQty - ingredient.quantity;
+      if (diff !== 0 || (req.body.expiryDate !== undefined && String(newExpiry) !== String(ingredient.expiryDate))) {
+        if (diff > 0) {
+          await IngredientLot.create({
+            ingredient: ingredient._id,
+            quantity: diff,
+            expiryDate: newExpiry,
+            type: 'IN',
+            reason: 'Owner dashboard update',
+          });
+        } else if (diff < 0) {
+          await consumeFromLots(ingredient._id, Math.abs(diff), 'ADJUSTMENT', 'Owner dashboard update');
+        } else if (req.body.expiryDate !== undefined) {
+          const earliestLot = await IngredientLot.findOne({
+            ingredient: ingredient._id,
+            type: 'IN',
+            remainingQuantity: { $gt: 0 },
+          }).sort({ expiryDate: 1, createdAt: 1 });
+          
+          if (earliestLot) {
+            earliestLot.expiryDate = newExpiry;
+            await earliestLot.save();
+          }
+        }
+      }
     }
-    ingredient.active_status = ingredient.quantity > 0 && ingredient.active_status !== false;
-    const saved = await ingredient.save();
+
+    await syncIngredientState(ingredient._id);
+    const saved = await Ingredient.findById(ingredient._id);
     res.json(toStockLot(saved));
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -183,7 +212,6 @@ router.patch('/stock/:id', ownerOnly, async (req, res) => {
 
 router.get('/waste', ownerOnly, async (req, res) => {
   try {
-    await processExpiredIngredientLots();
     const waste = await Waste.find()
       .populate('ingredient')
       .populate('user', 'name surname email')
@@ -218,6 +246,11 @@ router.post('/waste', ownerOnly, async (req, res) => {
         quantity_wasted: Number(entry.quantity || 0),
         total_cost: Number(entry.estimatedCost || 0),
       });
+
+      if (ingredient) {
+        await consumeFromLots(ingredient._id, Number(entry.quantity || 0), 'WASTE', `Manual waste: ${waste.reason}`);
+        await syncIngredientState(ingredient._id);
+      }
       created.push(waste);
     }
 

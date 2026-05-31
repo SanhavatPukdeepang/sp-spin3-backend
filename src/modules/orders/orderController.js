@@ -1,7 +1,7 @@
 import { Order } from './Order.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
 import { Menu } from '../menus/Menu.js';
-import { processExpiredIngredientLots } from '../ingredients/inventoryLifecycle.js';
+import { processExpiredIngredientLots, consumeFromLots, syncIngredientState } from '../ingredients/inventoryLifecycle.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
 
 const normalizeOrderItemQuantity = (quantity) => {
@@ -62,14 +62,10 @@ const validateIngredientRequirements = (requirements) => {
 };
 
 const deductIngredientRequirements = async (requirements) => {
-  const updates = [...requirements.entries()].map(([ingredientId, { requiredQuantity }]) =>
-    Ingredient.updateOne(
-      { _id: ingredientId },
-      { $inc: { quantity: -requiredQuantity } },
-    ),
-  );
-
-  await Promise.all(updates);
+  for (const [ingredientId, { requiredQuantity }] of requirements.entries()) {
+    await consumeFromLots(ingredientId, requiredQuantity, 'OUT', 'Order placed');
+    await syncIngredientState(ingredientId);
+  }
 };
 
 export const getOrders = async (req, res) => {

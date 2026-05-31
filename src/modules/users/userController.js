@@ -4,7 +4,7 @@ import { User } from './User.js';
 
 export const register = async (req, res) => {
   try {
-    const { name, surname, username, email, password, role } = req.body;
+    const { name, surname, username, email, password } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -20,7 +20,7 @@ export const register = async (req, res) => {
       username,
       email,
       password: hashedPassword,
-      role: role || 'customer'
+      role: 'customer'
     });
 
     await user.save();

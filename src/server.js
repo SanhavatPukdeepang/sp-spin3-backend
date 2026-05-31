@@ -1,6 +1,7 @@
 import express from 'express'
 import { createServer } from 'http'
 import cors from 'cors'
+import helmet from 'helmet'
 import dotenv from 'dotenv'
 import { connectDB } from './configs/mongodb.js'
 import { router as apiRoutes } from './routes/index.js'
@@ -22,6 +23,7 @@ const allowedOrigins = [
   'https://sp-spin3-frontend.vercel.app',
 ]
 
+app.use(helmet())
 app.use(cors({allowlist: allowedOrigins, credentials: true
     }
 ))

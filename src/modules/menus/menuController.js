@@ -84,7 +84,6 @@ const withStockStatus = (menu) => {
 
 export const getMenus = async (req, res) => {
   try {
-    await processExpiredIngredientLots();
     const { category, all } = req.query;
     let filter = {};
 
@@ -107,7 +106,6 @@ export const getMenus = async (req, res) => {
 
 export const getMenuById = async (req, res) => {
   try {
-    await processExpiredIngredientLots();
     const menu = await Menu.findById(req.params.id).populate('ingredients.ingredient');
     if (!menu) return res.status(404).json({ message: 'Menu item not found' });
     res.json(withStockStatus(menu));
@@ -197,6 +195,7 @@ export const updateMenu = async (req, res) => {
     }
 
     const updatedMenu = await menu.save();
+    await processExpiredIngredientLots();
     await updatedMenu.populate('ingredients.ingredient');
     await broadcastIngredientSnapshot();
     res.json(withStockStatus(updatedMenu));
@@ -219,6 +218,7 @@ export const updateMenuIngredients = async (req, res) => {
 
     menu.ingredients = sanitizedIngredients;
     const updatedMenu = await menu.save();
+    await processExpiredIngredientLots();
     await updatedMenu.populate('ingredients.ingredient');
 
     await MenuLog.create({

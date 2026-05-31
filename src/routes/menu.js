@@ -19,6 +19,6 @@ router.get('/', getMenus);
 router.get('/logs/all', isAuth, isEligible('owner'), getMenuLogs);
 router.get('/:id', getMenuById);
 router.post('/', isAuth, isEligible('owner'), upload.single('image'), createMenu);
-router.patch('/:id/ingredients', updateMenuIngredients);
+router.patch('/:id/ingredients', isAuth, isEligible('owner', 'cook'), updateMenuIngredients);
 router.patch('/:id', isAuth, isEligible('owner'), upload.single('image'), updateMenu);
 router.delete('/:id', isAuth, isEligible('owner'), deleteMenu);
