@@ -228,6 +228,25 @@ router.get('/promotions', ownerOnly, async (req, res) => {
   }
 });
 
+router.post('/promotions', ownerOnly, async (req, res) => {
+  try {
+    const startDate = req.body.startDate || req.body.date_from || new Date();
+    const endDate = req.body.endDate || req.body.date_to || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const promotion = await Promotion.create({
+      name: req.body.name,
+      type: req.body.discountType || req.body.type || 'fixed',
+      value: Number(req.body.discountValue ?? req.body.value ?? 0),
+      date_from: startDate,
+      date_to: endDate,
+      active_status: req.body.active !== undefined ? Boolean(req.body.active) : true,
+    });
+
+    res.status(201).json(toPromotion(promotion));
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
 router.patch('/promotions/:id', ownerOnly, async (req, res) => {
   try {
     const updates = {};
