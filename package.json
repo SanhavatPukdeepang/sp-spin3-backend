@@ -15,6 +15,7 @@
     "update:menu-ingredients": "node --env-file=.env updateMenuIngredients.js",
     "sync:ingredient-indexes": "node --env-file=.env syncIngredientIndexes.js",
     "seed:orders": "node --env-file=.env seedOrders.js",
+    "migrate:owner-schema": "node --env-file=.env migrateOwnerSchema.js",
     "upload:assets": "node --env-file=.env uploadExistingImages.js",
     "update:menu-images": "node --env-file=.env updateMenuImagesFromCloudinary.js"
   },

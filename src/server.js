@@ -4,6 +4,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { connectDB } from './configs/mongodb.js'
 import { router as apiRoutes } from './routes/index.js'
+import { router as ownerCompatRoutes } from './routes/ownerCompat.js'
 import { initIngredientSocket } from './realtime/ingredientSocket.js'
 
 dotenv.config()
@@ -24,6 +25,7 @@ app.use(cors({allowlist: allowedOrigins, credentials: true
     }
 ))
 app.use(express.json())
+app.use('/api/api', ownerCompatRoutes)
 app.use('/api', apiRoutes)
 
 await connectDB()
