@@ -37,11 +37,7 @@ app.use('/api', apiRoutes)
 await connectDB()
 initIngredientSocket(server)
 
-<<<<<<< HEAD
-const server = app.listen(PORT, () => {
-=======
 server.listen(PORT, () => {
->>>>>>> 32d5a7ff8af9c129e52314edcca468a42337b18a
   console.log(`Server running on port ${PORT}`)
 })
 
