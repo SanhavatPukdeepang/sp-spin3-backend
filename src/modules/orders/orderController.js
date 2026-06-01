@@ -68,11 +68,39 @@ const deductIngredientRequirements = async (requirements) => {
   }
 };
 
+const ITEM_DONE_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelled']);
+const ITEM_ACTIVE_STATUSES = new Set(['Cook', 'preparing']);
+const ORDER_TERMINAL_STATUSES = new Set(['completed', 'delivered', 'cancelled']);
+
+const getNextOrderStatusFromItems = (order) => {
+  const items = Array.isArray(order?.orderList) ? order.orderList : [];
+  if (items.length === 0 || ORDER_TERMINAL_STATUSES.has(order.status)) return order.status;
+
+  const itemStatuses = items.map((item) => item?.status || 'InKitchen');
+  if (itemStatuses.every((status) => status === 'cancel' || status === 'cancelled')) return 'cancelled';
+  if (itemStatuses.every((status) => ITEM_DONE_STATUSES.has(status))) {
+    return order.type === 'delivery' ? 'delivery' : 'finished';
+  }
+  if (itemStatuses.some((status) => ITEM_ACTIVE_STATUSES.has(status))) return 'preparing';
+  return order.status;
+};
+
+const reconcileOrderStatus = async (order) => {
+  if (!order) return order;
+  const nextStatus = getNextOrderStatusFromItems(order);
+  if (!nextStatus || nextStatus === order.status) return order;
+
+  order.status = nextStatus;
+  await order.save();
+  return order;
+};
+
 export const getOrders = async (req, res) => {
   try {
     await processExpiredIngredientLots();
     const orders = await Order.find().sort({ createdAt: -1 });
-    res.json(orders);
+    const reconciledOrders = await Promise.all(orders.map(reconcileOrderStatus));
+    res.json(reconciledOrders);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -83,7 +111,7 @@ export const getOrderById = async (req, res) => {
     await processExpiredIngredientLots();
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
-    res.json(order);
+    res.json(await reconcileOrderStatus(order));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -132,7 +160,7 @@ export const updateOrderItemStatus = async (req, res) => {
     );
     if (!order) return res.status(404).json({ message: 'Order or item not found' });
 
-    res.json(order);
+    res.json(await reconcileOrderStatus(order));
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -140,11 +168,21 @@ export const updateOrderItemStatus = async (req, res) => {
 
 export const updateOrderStatus = async (req, res) => {
   try {
-    const updatedOrder = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status: req.body.status },
-      { new: true }
-    );
+    const allowedStatuses = ['pending', 'preparing', 'completed', 'delivery', 'finished', 'delivered', 'cancelled'];
+    const updates = {};
+
+    if (req.body.status) {
+      if (!allowedStatuses.includes(req.body.status)) {
+        return res.status(400).json({ message: 'Invalid order status' });
+      }
+      updates.status = req.body.status;
+      if (req.body.status === 'delivered') updates.deliveredAt = new Date();
+    }
+
+    if (req.body.riderNote !== undefined) updates.riderNote = req.body.riderNote;
+
+    const updatedOrder = await Order.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!updatedOrder) return res.status(404).json({ message: 'Order not found' });
     res.json(updatedOrder);
   } catch (err) {
     res.status(400).json({ message: err.message });

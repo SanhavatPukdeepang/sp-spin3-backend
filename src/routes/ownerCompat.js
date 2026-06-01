@@ -203,7 +203,7 @@ router.post('/orders', async (req, res) => {
     const total = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
     const order = await Order.create({
       type: toBackendOrderType(req.body.type || 'In-Restaurant'),
-      customer: req.body.customer || { name: 'Walk-in Customer' },
+      customer: req.body.customer || {},
       orderList: normalizeOrderItems(items),
       payment: {
         amount: Number(req.body.total ?? total),

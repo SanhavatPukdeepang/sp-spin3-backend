@@ -33,7 +33,14 @@ export const register = async (req, res) => {
 
     res.status(201).json({
       token,
-      user: { id: user._id, name: user.name, role: user.role }
+      user: {
+        id: user._id,
+        name: user.name,
+        surname: user.surname,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      }
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -59,7 +66,14 @@ export const login = async (req, res) => {
 
     res.json({
       token,
-      user: { id: user._id, name: user.name, role: user.role },
+      user: {
+        id: user._id,
+        name: user.name,
+        surname: user.surname,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
