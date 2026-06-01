@@ -1,6 +1,3 @@
-
-
-
 ### Get all orders
 GET http://localhost:5001/api/users
 
@@ -49,4 +46,11 @@ Content-Type: application/json
   "status": "completed"
 }
 
+### Login cook
+POST http://localhost:5001/api/auth/login
+Content-Type: application/json
 
+{
+  "email": "cook@gmail.com",
+  "password": "cook123"
+}

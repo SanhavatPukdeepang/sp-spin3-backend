@@ -1,6 +1,38 @@
 import { Menu } from './Menu.js';
 import { MenuLog } from './MenuLog.js';
 
+const withStockStatus = (menu) => {
+  const item = menu.toObject ? menu.toObject() : menu;
+  const linkedIngredients = Array.isArray(item.ingredients) ? item.ingredients : [];
+  const missingIngredients = linkedIngredients
+    .filter((entry) => {
+      const ingredient = entry.ingredient;
+      return (
+        !ingredient ||
+        ingredient.active_status === false ||
+        Number(ingredient.quantity || 0) < Number(entry.quantity || 0)
+      );
+    })
+    .map((entry) => ({
+      name: entry.ingredient?.name || 'Unknown ingredient',
+      required: Number(entry.quantity || 0),
+      available: Number(entry.ingredient?.quantity || 0),
+      unit: entry.ingredient?.unit || '',
+    }));
+
+  return {
+    ...item,
+    soldOut: item.available === false || missingIngredients.length > 0,
+    soldOutReason:
+      item.available === false
+        ? 'Menu unavailable'
+        : missingIngredients.length > 0
+          ? 'Ingredient stock is not enough'
+          : '',
+    missingIngredients,
+  };
+};
+
 export const getMenus = async (req, res) => {
   try {
     const { category, all } = req.query;
@@ -14,8 +46,10 @@ export const getMenus = async (req, res) => {
       filter.category = category;
     }
 
-    const menus = await Menu.find(filter).sort({ category: 1, name: 1 });
-    res.json(menus);
+    const menus = await Menu.find(filter)
+      .populate('ingredients.ingredient')
+      .sort({ category: 1, name: 1 });
+    res.json(menus.map(withStockStatus));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -23,9 +57,9 @@ export const getMenus = async (req, res) => {
 
 export const getMenuById = async (req, res) => {
   try {
-    const menu = await Menu.findById(req.params.id);
+    const menu = await Menu.findById(req.params.id).populate('ingredients.ingredient');
     if (!menu) return res.status(404).json({ message: 'Menu item not found' });
-    res.json(menu);
+    res.json(withStockStatus(menu));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -41,7 +75,7 @@ export const getMenuLogs = async (req, res) => {
 };
 
 export const createMenu = async (req, res) => {
-  const { name, description, price, image, category, cookingTime } = req.body;
+  const { name, description, price, image, category, cookingTime, ingredients } = req.body;
 
   if (!name || price === undefined || !category) {
     return res.status(400).json({
@@ -50,7 +84,7 @@ export const createMenu = async (req, res) => {
   }
 
   try {
-    const menu = new Menu({ name, description, price, image, category, cookingTime });
+    const menu = new Menu({ name, description, price, image, category, cookingTime, ingredients });
     const newMenu = await menu.save();
 
     await MenuLog.create({
@@ -69,7 +103,7 @@ export const createMenu = async (req, res) => {
 
 export const updateMenu = async (req, res) => {
   try {
-    const { name, description, price, image, category, cookingTime, available } = req.body;
+    const { name, description, price, image, category, cookingTime, available, ingredients } = req.body;
 
     const menu = await Menu.findById(req.params.id);
     if (!menu) return res.status(404).json({ message: 'Menu item not found' });
@@ -80,6 +114,7 @@ export const updateMenu = async (req, res) => {
     if (image !== undefined) menu.image = image;
     if (category !== undefined) menu.category = category;
     if (cookingTime !== undefined) menu.cookingTime = cookingTime;
+    if (ingredients !== undefined) menu.ingredients = ingredients;
 
     if (available !== undefined) {
       const changed = menu.available !== available;
@@ -96,7 +131,43 @@ export const updateMenu = async (req, res) => {
     }
 
     const updatedMenu = await menu.save();
-    res.json(updatedMenu);
+    await updatedMenu.populate('ingredients.ingredient');
+    res.json(withStockStatus(updatedMenu));
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+export const updateMenuIngredients = async (req, res) => {
+  try {
+    const { ingredients } = req.body;
+    if (!Array.isArray(ingredients)) {
+      return res.status(400).json({ message: 'Ingredients must be an array' });
+    }
+
+    const sanitizedIngredients = ingredients
+      .filter((entry) => entry?.ingredient)
+      .map((entry) => ({
+        ingredient: entry.ingredient,
+        quantity: Number(entry.quantity) > 0 ? Number(entry.quantity) : 1,
+      }));
+
+    const menu = await Menu.findById(req.params.id);
+    if (!menu) return res.status(404).json({ message: 'Menu item not found' });
+
+    menu.ingredients = sanitizedIngredients;
+    const updatedMenu = await menu.save();
+    await updatedMenu.populate('ingredients.ingredient');
+
+    await MenuLog.create({
+      action: 'ingredients_updated',
+      menuId: updatedMenu._id,
+      menuName: updatedMenu.name,
+      performedBy: req.user?.name || req.user?.email || 'cook',
+      performedByRole: req.user?.role || 'cook',
+    });
+
+    res.json(withStockStatus(updatedMenu));
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

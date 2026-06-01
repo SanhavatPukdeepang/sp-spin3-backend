@@ -5,6 +5,7 @@ import {
   getMenuLogs,
   createMenu,
   updateMenu,
+  updateMenuIngredients,
   deleteMenu,
 } from '../modules/menus/menuController.js';
 import { isAuth, isEligible } from '../middleware/auth.js';
@@ -15,5 +16,6 @@ router.get('/', getMenus);
 router.get('/logs/all', isAuth, isEligible('owner'), getMenuLogs);
 router.get('/:id', getMenuById);
 router.post('/', isAuth, isEligible('owner'), createMenu);
+router.patch('/:id/ingredients', updateMenuIngredients);
 router.patch('/:id', isAuth, isEligible('owner'), updateMenu);
 router.delete('/:id', isAuth, isEligible('owner'), deleteMenu);
