@@ -2,18 +2,27 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
+  "homepage": "https://github.com/Pathomratan/sp-spin3-backend#readme",
+  "bugs": {
+    "url": "https://github.com/Pathomratan/sp-spin3-backend/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pathomratan/sp-spin3-backend.git"
+  },
   "license": "ISC",
   "author": "",
   "type": "module",
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "node --env-file=.env  --watch src/server.js",
-    "start": "node --watch src/server.js",
+    "dev": "node --env-file=.env src/server.js",
+    "start": "node src/server.js",
     "seed:ingredients": "node --env-file=.env seedIngredients.js",
     "seed:menus": "node --env-file=.env seedMenus.js",
     "update:menu-ingredients": "node --env-file=.env updateMenuIngredients.js",
     "sync:ingredient-indexes": "node --env-file=.env syncIngredientIndexes.js",
+    "seed:users": "node --env-file=../.env seedUsers.js",
     "seed:orders": "node --env-file=.env seedOrders.js",
     "migrate:owner-schema": "node --env-file=.env migrateOwnerSchema.js",
     "upload:assets": "node --env-file=.env uploadExistingImages.js",
@@ -25,6 +34,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.6.2",
     "multer": "^2.1.1",

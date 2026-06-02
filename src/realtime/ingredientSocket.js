@@ -1,5 +1,6 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import { Ingredient } from '../modules/ingredients/Ingredient.js';
+import { IngredientLot } from '../modules/ingredients/IngredientLot.js';
 import { Menu } from '../modules/menus/Menu.js';
 import { broadcastSSE } from '../utils/sse.js';
 
@@ -38,6 +39,32 @@ const withStockStatus = (menu) => {
   };
 };
 
+const withExpiredQuantities = async (ingredients) => {
+  const ingredientList = Array.isArray(ingredients) ? ingredients : [];
+  const expiredTotals = await IngredientLot.aggregate([
+    {
+      $match: {
+        ingredient: { $in: ingredientList.map((ingredient) => ingredient._id) },
+        type: 'EXPIRED',
+      },
+    },
+    {
+      $group: {
+        _id: '$ingredient',
+        expiredQuantity: { $sum: '$quantity' },
+      },
+    },
+  ]);
+  const expiredQuantityById = new Map(
+    expiredTotals.map((item) => [String(item._id), Math.abs(Number(item.expiredQuantity || 0))]),
+  );
+
+  return ingredientList.map((ingredient) => ({
+    ...(ingredient.toObject ? ingredient.toObject() : ingredient),
+    expiredQuantity: expiredQuantityById.get(String(ingredient._id)) || 0,
+  }));
+};
+
 async function sendIngredientSnapshot(socket) {
   const [ingredients, menus] = await Promise.all([
     Ingredient.find().sort({ ingredient_index: 1, name: 1 }),
@@ -47,7 +74,7 @@ async function sendIngredientSnapshot(socket) {
   socket.send(
     JSON.stringify({
       type: 'ingredient:snapshot',
-      ingredients,
+      ingredients: await withExpiredQuantities(ingredients),
       menus: menus.map(withStockStatus),
     }),
   );
@@ -78,9 +105,10 @@ export async function broadcastIngredientSnapshot() {
   ]);
 
   const processedMenus = menus.map(withStockStatus);
+  const processedIngredients = await withExpiredQuantities(ingredients);
   const payload = JSON.stringify({
     type: 'ingredient:snapshot',
-    ingredients,
+    ingredients: processedIngredients,
     menus: processedMenus,
   });
 

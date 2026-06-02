@@ -11,7 +11,7 @@ import { Waste } from './src/modules/wastes/Waste.js';
 
 dotenv.config();
 
-const validOrderStatuses = new Set(['pending', 'preparing', 'completed', 'cancelled']);
+const validOrderStatuses = new Set(['pending', 'preparing', 'completed', 'delivery', 'finished', 'delivered', 'cancelled']);
 const validItemStatuses = new Set([
   'InKitchen',
   'Cook',
@@ -40,8 +40,10 @@ const normalizeOrderStatus = (status) => {
     New: 'pending',
     Cooking: 'preparing',
     Ready: 'completed',
+    Delivery: 'delivery',
+    Finished: 'finished',
+    Delivered: 'delivered',
     Paid: 'completed',
-    Delivered: 'completed',
     Cancelled: 'cancelled',
   };
   const normalized = map[status] || status;

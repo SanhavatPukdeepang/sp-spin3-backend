@@ -13,6 +13,7 @@ export const isAuth = (req, res, next) => {
 
 export const isEligible = (...roles) => (req, res, next) => {
   if (!roles.includes(req.user?.role)) {
+    console.log(`[Auth] Access denied for user: ${req.user?.id}, role: ${req.user?.role}. Expected: ${roles}`);
     return res.status(403).json({ message: 'Access denied' })
   }
   next()

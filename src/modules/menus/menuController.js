@@ -1,6 +1,7 @@
 import { Menu } from './Menu.js';
 import { MenuLog } from './MenuLog.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
+import { processExpiredIngredientLots } from '../ingredients/inventoryLifecycle.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
 import { broadcastSSE } from '../../utils/sse.js';
 
@@ -194,6 +195,7 @@ export const updateMenu = async (req, res) => {
     }
 
     const updatedMenu = await menu.save();
+    await processExpiredIngredientLots();
     await updatedMenu.populate('ingredients.ingredient');
     await broadcastIngredientSnapshot();
     res.json(withStockStatus(updatedMenu));
@@ -216,6 +218,7 @@ export const updateMenuIngredients = async (req, res) => {
 
     menu.ingredients = sanitizedIngredients;
     const updatedMenu = await menu.save();
+    await processExpiredIngredientLots();
     await updatedMenu.populate('ingredients.ingredient');
 
     await MenuLog.create({

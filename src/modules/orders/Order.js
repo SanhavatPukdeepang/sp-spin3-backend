@@ -4,7 +4,10 @@ import { embeddedOrderItemSchema } from '../orderItems/OrderItem.js';
 const orderSchema = new mongoose.Schema({
   type: { type: String, enum: ['delivery', 'Onsite'], required: true },
   customer: {
-    name: { type: String, required: true },
+    userId: { type: String },
+    email: { type: String },
+    username: { type: String },
+    name: { type: String },
     contact: { type: String },
     address: { type: String },
     note: { type: String }
@@ -18,9 +21,11 @@ const orderSchema = new mongoose.Schema({
     transactionId: { type: String },
     paidAt: { type: Date }
   },
+  riderNote: { type: String },
+  deliveredAt: { type: Date },
   status: { 
     type: String, 
-    enum: ['pending', 'preparing', 'completed', 'cancelled'], 
+    enum: ['pending', 'preparing', 'completed', 'delivery', 'finished', 'delivered', 'cancelled'], 
     default: 'pending' 
   },
   createdAt: { type: Date, default: Date.now }

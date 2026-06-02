@@ -2,10 +2,12 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { isAuth, isEligible } from '../middleware/auth.js';
 import { Ingredient } from '../modules/ingredients/Ingredient.js';
+import { IngredientLot } from '../modules/ingredients/IngredientLot.js';
 import { Order } from '../modules/orders/Order.js';
 import { Promotion } from '../modules/promotions/Promotion.js';
 import { User } from '../modules/users/User.js';
 import { Waste } from '../modules/wastes/Waste.js';
+import { processExpiredIngredientLots, syncIngredientState, consumeFromLots } from '../modules/ingredients/inventoryLifecycle.js';
 
 export const router = Router();
 
@@ -80,7 +82,7 @@ const toStockLot = (ingredient) => ({
   unit: ingredient.unit,
   price: ingredient.price_per_unit,
   reorderPoint: ingredient.low_stock_threshold,
-  expiryDate: null,
+  expiryDate: ingredient.expiryDate || null,
   active: ingredient.active_status,
 });
 
@@ -156,19 +158,53 @@ router.get('/stock', ownerOnly, async (req, res) => {
 
 router.patch('/stock/:id', ownerOnly, async (req, res) => {
   try {
+    const ingredient = await Ingredient.findById(req.params.id);
+    if (!ingredient) return res.status(404).json({ message: 'Stock item not found' });
+
     const updates = {};
-    if (req.body.quantity !== undefined) updates.quantity = Number(req.body.quantity);
     if (req.body.price !== undefined) updates.price_per_unit = Number(req.body.price);
     if (req.body.reorderPoint !== undefined) updates.low_stock_threshold = Number(req.body.reorderPoint);
     if (req.body.active !== undefined) updates.active_status = Boolean(req.body.active);
+    
+    // Apply basic updates
+    Object.assign(ingredient, updates);
+    await ingredient.save();
 
-    const ingredient = await Ingredient.findByIdAndUpdate(req.params.id, updates, {
-      new: true,
-      runValidators: true,
-    });
+    // Handle quantity and expiry changes via lots
+    if (req.body.quantity !== undefined || req.body.expiryDate !== undefined) {
+      const newQty = req.body.quantity !== undefined ? Number(req.body.quantity) : ingredient.quantity;
+      const newExpiry = req.body.expiryDate !== undefined ? (req.body.expiryDate ? new Date(req.body.expiryDate) : null) : ingredient.expiryDate;
 
-    if (!ingredient) return res.status(404).json({ message: 'Stock item not found' });
-    res.json(toStockLot(ingredient));
+      const diff = newQty - ingredient.quantity;
+      if (diff !== 0 || (req.body.expiryDate !== undefined && String(newExpiry) !== String(ingredient.expiryDate))) {
+        if (diff > 0) {
+          await IngredientLot.create({
+            ingredient: ingredient._id,
+            quantity: diff,
+            expiryDate: newExpiry,
+            type: 'IN',
+            reason: 'Owner dashboard update',
+          });
+        } else if (diff < 0) {
+          await consumeFromLots(ingredient._id, Math.abs(diff), 'ADJUSTMENT', 'Owner dashboard update');
+        } else if (req.body.expiryDate !== undefined) {
+          const earliestLot = await IngredientLot.findOne({
+            ingredient: ingredient._id,
+            type: 'IN',
+            remainingQuantity: { $gt: 0 },
+          }).sort({ expiryDate: 1, createdAt: 1 });
+          
+          if (earliestLot) {
+            earliestLot.expiryDate = newExpiry;
+            await earliestLot.save();
+          }
+        }
+      }
+    }
+
+    await syncIngredientState(ingredient._id);
+    const saved = await Ingredient.findById(ingredient._id);
+    res.json(toStockLot(saved));
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -210,6 +246,11 @@ router.post('/waste', ownerOnly, async (req, res) => {
         quantity_wasted: Number(entry.quantity || 0),
         total_cost: Number(entry.estimatedCost || 0),
       });
+
+      if (ingredient) {
+        await consumeFromLots(ingredient._id, Number(entry.quantity || 0), 'WASTE', `Manual waste: ${waste.reason}`);
+        await syncIngredientState(ingredient._id);
+      }
       created.push(waste);
     }
 
@@ -225,6 +266,25 @@ router.get('/promotions', ownerOnly, async (req, res) => {
     res.json(promotions.map(toPromotion));
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/promotions', ownerOnly, async (req, res) => {
+  try {
+    const startDate = req.body.startDate || req.body.date_from || new Date();
+    const endDate = req.body.endDate || req.body.date_to || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    const promotion = await Promotion.create({
+      name: req.body.name,
+      type: req.body.discountType || req.body.type || 'fixed',
+      value: Number(req.body.discountValue ?? req.body.value ?? 0),
+      date_from: startDate,
+      date_to: endDate,
+      active_status: req.body.active !== undefined ? Boolean(req.body.active) : true,
+    });
+
+    res.status(201).json(toPromotion(promotion));
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 });
 

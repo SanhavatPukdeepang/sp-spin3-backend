@@ -1,9 +1,12 @@
 import mongoose from "mongoose";
-import { act } from "react";
 
 const tableSchema = new mongoose.Schema(
   {
     table_Id: { type: String, required: true, unique: true },
+    number: { type: Number },
+    area: { type: String, default: "Main Floor" },
+    seats: { type: Number, default: 4 },
+    seatedAt: { type: Date, default: null },
     status: {
       type: String,
       enum: ["FREE", "OCCUPIED", "BILL", "RESERVED"],

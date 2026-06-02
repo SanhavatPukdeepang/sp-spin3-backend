@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import { Ingredient } from './src/modules/ingredients/Ingredient.js';
+import { IngredientLot } from './src/modules/ingredients/IngredientLot.js';
+import { syncIngredientState } from './src/modules/ingredients/inventoryLifecycle.js';
 import { connectDB } from './src/configs/mongodb.js';
 
 dotenv.config();
@@ -380,10 +382,33 @@ async function seedIngredients() {
 
     // Clear existing ingredients
     await Ingredient.deleteMany({});
+    await IngredientLot.deleteMany({});
     console.log('🗑️  Cleared existing ingredients');
 
     // Insert new ingredients
-    const result = await Ingredient.insertMany(ingredients);
+    const insertedIngredients = await Ingredient.insertMany(
+      ingredients.map((ingredient) => ({
+        ...ingredient,
+        quantity: 0,
+      })),
+    );
+
+    for (const [index, ingredient] of insertedIngredients.entries()) {
+      const initialQuantity = Number(ingredients[index].quantity || 0);
+      if (initialQuantity <= 0) continue;
+
+      await IngredientLot.create({
+        ingredient: ingredient._id,
+        quantity: initialQuantity,
+        remainingQuantity: initialQuantity,
+        expiryDate: ingredients[index].expiryDate || null,
+        type: 'IN',
+        reason: 'Seed stock lot',
+      });
+      await syncIngredientState(ingredient._id);
+    }
+
+    const result = await Ingredient.find().sort({ ingredient_index: 1, name: 1 });
     console.log(`\n✅ Seeded ${result.length} ingredients\n`);
 
     // Display grouped by category
