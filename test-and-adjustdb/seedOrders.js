@@ -1,79 +1,65 @@
-// import mongoose from 'mongoose';
-// import { Order } from './src/modules/orders/Order.js';
-// import dotenv from 'dotenv';
+import { connectDB } from '../src/configs/mongodb.js';
+import { Order } from '../src/modules/orders/Order.js';
 
-// dotenv.config();
+const deliveryOrders = [
+  {
+    type: 'delivery',
+    customer: {
+      email: 'delivery-ready@example.com',
+      name: 'Delivery Ready Customer',
+      contact: '081-234-5678',
+      address: '34 G Tower, Rama 9 Road, Bangkok',
+      note: 'Leave at reception',
+    },
+    orderList: [
+      {
+        name: 'Crispy Chicken Combo',
+        quantity: 1,
+        price: 159,
+        status: 'finished',
+      },
+    ],
+    status: 'delivery',
+  },
+  {
+    type: 'delivery',
+    customer: {
+      email: 'delivery-kitchen@example.com',
+      name: 'Delivery Kitchen Customer',
+      contact: '082-345-6789',
+      address: 'Asok Montri Road, Bangkok',
+      note: 'Call before arrival',
+    },
+    orderList: [
+      {
+        name: 'Spicy Chicken Burger',
+        quantity: 2,
+        price: 99,
+        status: 'Cook',
+      },
+    ],
+    status: 'preparing',
+  },
+];
 
-// const orders = [
-//   {
-//     type: "Onsite",
-//     customer: {
-//       name: "Table 05",
-//       note: "ขอซอสมะเขือเทศเพิ่ม",
-//     },
-//     orderList: [
-//       {
-//         name: "fire_chicken",
-//         quantity: 5,
-//         price: 159,
-//         status: "Cook",
-//         orderTime: new Date(),
-//       },
-//     ],
-//     status: "preparing"
-//   },
-//   {
-//     type: "delivery",
-//     customer: {
-//       name: "สมชาย รักดี",
-//       contact: "081-234-5678",
-//       address: "123/45 หมู่บ้านแสนสุข",
-//       note: "ฝากไว้ที่ป้อมยาม",
-//     },
-//     orderList: [
-//       {
-//         name: "burger",
-//         quantity: 1,
-//         price: 89,
-//         status: "finished",
-//         orderTime: new Date(),
-//       },
-//     ],
-//     status: "completed"
-//   },
-//   {
-//     type: "Onsite",
-//     customer: {
-//       name: "Table 12",
-//     },
-//     orderList: [
-//       {
-//         name: "french_fries",
-//         quantity: 2,
-//         price: 55,
-//         status: "InKitchen",
-//         orderTime: new Date(),
-//       },
-//     ],
-//     status: "pending"
-//   }
-// ];
+const seedOrders = async () => {
+  try {
+    await connectDB();
 
-// async function seed() {
-//   try {
-//     await mongoose.connect(process.env.MONGODB_URI, { dbName: "serious-spin3" });
-//     console.log("Connected to MongoDB for seeding");
-    
-//     await Order.deleteMany({});
-//     console.log("Cleared existing orders");
-    
-//     await Order.insertMany(orders);
-//     console.log("Inserted seed orders");
-    
-//     mongoose.disconnect();
-//   } catch (err) {
-//     console.error(err);
-//   }
-// }
+    for (const order of deliveryOrders) {
+      await Order.findOneAndUpdate(
+        { 'customer.email': order.customer.email },
+        { $setOnInsert: order },
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+      );
+      console.log(`Delivery order ready: ${order.customer.email}`);
+    }
 
-// seed();
+    process.exit(0);
+  } catch (err) {
+    console.error('Error seeding orders:', err);
+    process.exit(1);
+  }
+};
+
+seedOrders();

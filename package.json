@@ -22,8 +22,8 @@
     "seed:menus": "node --env-file=.env seedMenus.js",
     "update:menu-ingredients": "node --env-file=.env updateMenuIngredients.js",
     "sync:ingredient-indexes": "node --env-file=.env syncIngredientIndexes.js",
-    "seed:users": "node --env-file=../.env seedUsers.js",
-    "seed:orders": "node --env-file=.env seedOrders.js",
+    "seed:users": "node --env-file=.env test-and-adjustdb/seedUsers.js",
+    "seed:orders": "node --env-file=.env test-and-adjustdb/seedOrders.js",
     "migrate:owner-schema": "node --env-file=.env migrateOwnerSchema.js",
     "upload:assets": "node --env-file=.env uploadExistingImages.js",
     "update:menu-images": "node --env-file=.env updateMenuImagesFromCloudinary.js"
