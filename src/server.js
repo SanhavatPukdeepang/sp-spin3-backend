@@ -9,7 +9,7 @@ import { router as ownerCompatRoutes } from './routes/ownerCompat.js'
 import { processExpiredIngredientLots } from './modules/ingredients/inventoryLifecycle.js'
 import { initIngredientSocket } from './realtime/ingredientSocket.js'
 
-dotenv.config();
+dotenv.config()
 
 const app = express()
 const PORT = process.env.PORT || 5000
@@ -24,7 +24,9 @@ const allowedOrigins = [
 ]
 
 app.use(helmet())
-app.use(cors({allowlist: allowedOrigins, credentials: true})) 
+app.use(cors({allowlist: allowedOrigins, credentials: true
+    }
+))
 app.use(express.json())
 app.use('/api/api', ownerCompatRoutes)
 app.use('/api', apiRoutes)
@@ -45,9 +47,4 @@ setInterval(sweepExpiredIngredientLots, 10 * 60 * 1000)
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
-})
-
-server.on('error', (err) => {
-  console.error(`Failed to start server on port ${PORT}:`, err.message)
-  process.exit(1)
 })
