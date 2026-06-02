@@ -9,6 +9,13 @@ const parseRequiredExpiryDate = (expiryDate) => {
   return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
 };
 
+const toNumber = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const roundQuantity = (value) => Math.round(toNumber(value) * 100) / 100;
+
 const getStartOfYesterday = () => {
   const yesterday = new Date();
   yesterday.setHours(0, 0, 0, 0);
@@ -122,7 +129,8 @@ export async function getIngredientLots(req, res) {
 export async function addIngredientStock(req, res) {
   try {
     const { quantity, expiryDate, reason } = req.body;
-    if (typeof quantity !== 'number' || quantity <= 0) {
+    const normalizedQuantity = roundQuantity(quantity);
+    if (typeof quantity !== 'number' || normalizedQuantity <= 0) {
       return res.status(400).json({ error: 'Quantity must be a positive number' });
     }
     const lotExpiryDate = parseRequiredExpiryDate(expiryDate);
@@ -137,7 +145,9 @@ export async function addIngredientStock(req, res) {
 
     await IngredientLot.create({
       ingredient: ingredient._id,
-      quantity,
+      quantity: normalizedQuantity,
+      remainingQuantity: normalizedQuantity,
+      unit: ingredient.unit,
       expiryDate: lotExpiryDate,
       type: 'IN',
       reason: reason || 'New lot added',
@@ -185,8 +195,8 @@ export async function updateIngredientLot(req, res) {
     const lot = await IngredientLot.findById(lotId);
     if (!lot) return res.status(404).json({ error: 'Lot not found' });
 
-    if (quantity !== undefined) lot.quantity = Number(quantity);
-    if (remainingQuantity !== undefined) lot.remainingQuantity = Number(remainingQuantity);
+    if (quantity !== undefined) lot.quantity = roundQuantity(quantity);
+    if (remainingQuantity !== undefined) lot.remainingQuantity = roundQuantity(remainingQuantity);
     if (expiryDate !== undefined) lot.expiryDate = expiryDate ? new Date(expiryDate) : null;
     if (reason !== undefined) lot.reason = reason;
     if (lot.type === 'IN' && lot.remainingQuantity > 0 && !parseRequiredExpiryDate(lot.expiryDate)) {
@@ -227,6 +237,7 @@ export async function deleteIngredientLot(req, res) {
 export async function updateIngredientStock(req, res) {
   try {
     const { quantity, expiryDate, reason } = req.body;
+    const normalizedQuantity = roundQuantity(quantity);
     if (typeof quantity !== 'number') {
       return res.status(400).json({ error: 'Quantity must be a number' });
     }
@@ -237,7 +248,7 @@ export async function updateIngredientStock(req, res) {
     }
 
     // Determine the type of change
-    const diff = quantity - ingredient.quantity;
+    const diff = roundQuantity(normalizedQuantity - ingredient.quantity);
     if (diff === 0) return res.json(ingredient);
 
     if (diff > 0) {
@@ -249,6 +260,8 @@ export async function updateIngredientStock(req, res) {
       await IngredientLot.create({
         ingredient: ingredient._id,
         quantity: diff,
+        remainingQuantity: diff,
+        unit: ingredient.unit,
         expiryDate: lotExpiryDate,
         type: 'IN',
         reason: reason || 'Manual stock adjustment (Add)',
@@ -314,13 +327,13 @@ export async function updateIngredient(req, res) {
       const ingredient = await Ingredient.findById(req.params.id);
       if (!ingredient) return res.status(404).json({ error: 'Ingredient not found' });
 
-      const newQty = req.body.quantity !== undefined ? Number(req.body.quantity) : ingredient.quantity;
+      const newQty = req.body.quantity !== undefined ? roundQuantity(req.body.quantity) : ingredient.quantity;
       const newExpiry = req.body.expiryDate !== undefined ? (req.body.expiryDate ? new Date(req.body.expiryDate) : null) : ingredient.expiryDate;
       if (req.body.expiryDate !== undefined && newQty > 0 && !parseRequiredExpiryDate(newExpiry)) {
         return res.status(400).json({ error: 'Expiry date is required for active stock' });
       }
 
-      const diff = newQty - ingredient.quantity;
+      const diff = roundQuantity(newQty - ingredient.quantity);
       if (diff !== 0 || (req.body.expiryDate !== undefined && String(newExpiry) !== String(ingredient.expiryDate))) {
         if (diff > 0) {
           if (!parseRequiredExpiryDate(newExpiry)) {
@@ -329,6 +342,8 @@ export async function updateIngredient(req, res) {
           await IngredientLot.create({
             ingredient: ingredient._id,
             quantity: diff,
+            remainingQuantity: diff,
+            unit: updates.unit || ingredient.unit,
             expiryDate: newExpiry,
             type: 'IN',
             reason: 'Ingredient details update',
@@ -359,6 +374,13 @@ export async function updateIngredient(req, res) {
 
     if (!ingredient) {
       return res.status(404).json({ error: 'Ingredient not found' });
+    }
+
+    if (updates.unit !== undefined) {
+      await IngredientLot.updateMany(
+        { ingredient: ingredient._id, type: 'IN' },
+        { $set: { unit: updates.unit } },
+      );
     }
 
     await syncIngredientState(ingredient._id);
@@ -432,9 +454,9 @@ export async function createIngredient(req, res) {
       ingredient_index: nextIndex,
       name: trimmedName,
       quantity: 0,
-      unit,
-      price_per_unit,
-      low_stock_threshold: low_stock_threshold || 0,
+      unit: String(unit).trim(),
+      price_per_unit: Number(price_per_unit),
+      low_stock_threshold: roundQuantity(low_stock_threshold || 0),
       active_status: true,
       expiryDate: expiryDate ? new Date(expiryDate) : null,
     });
@@ -444,7 +466,9 @@ export async function createIngredient(req, res) {
     if (initialQuantity > 0) {
       await IngredientLot.create({
         ingredient: ingredient._id,
-        quantity: initialQuantity,
+        quantity: roundQuantity(initialQuantity),
+        remainingQuantity: roundQuantity(initialQuantity),
+        unit: ingredient.unit,
         expiryDate: initialLotExpiryDate,
         type: 'IN',
         reason: 'Initial setup',

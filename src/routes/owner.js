@@ -61,6 +61,11 @@ const getOrderTotal = (order) => {
   }, 0);
 };
 
+const roundQuantity = (value) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : 0;
+};
+
 const getCustomerTier = (totalSpent) => {
   if (totalSpent >= 50000) return 'VIP';
   if (totalSpent >= 20000) return 'Gold';
@@ -162,8 +167,23 @@ router.patch('/stock/:id', ownerOnly, async (req, res) => {
     if (!ingredient) return res.status(404).json({ message: 'Stock item not found' });
 
     const updates = {};
+    if (req.body.ingredientName !== undefined || req.body.name !== undefined) {
+      const nextName = String(req.body.ingredientName ?? req.body.name).trim();
+      if (!nextName) return res.status(400).json({ message: 'Ingredient name is required' });
+      const duplicate = await Ingredient.findOne({
+        _id: { $ne: ingredient._id },
+        name: new RegExp(`^${escapeRegex(nextName)}$`, 'i'),
+      });
+      if (duplicate) return res.status(409).json({ message: 'Ingredient name already exists' });
+      updates.name = nextName;
+    }
+    if (req.body.unit !== undefined) {
+      const nextUnit = String(req.body.unit).trim();
+      if (!nextUnit) return res.status(400).json({ message: 'Unit is required' });
+      updates.unit = nextUnit;
+    }
     if (req.body.price !== undefined) updates.price_per_unit = Number(req.body.price);
-    if (req.body.reorderPoint !== undefined) updates.low_stock_threshold = Number(req.body.reorderPoint);
+    if (req.body.reorderPoint !== undefined) updates.low_stock_threshold = roundQuantity(req.body.reorderPoint);
     if (req.body.active !== undefined) updates.active_status = Boolean(req.body.active);
     
     // Apply basic updates
@@ -172,15 +192,17 @@ router.patch('/stock/:id', ownerOnly, async (req, res) => {
 
     // Handle quantity and expiry changes via lots
     if (req.body.quantity !== undefined || req.body.expiryDate !== undefined) {
-      const newQty = req.body.quantity !== undefined ? Number(req.body.quantity) : ingredient.quantity;
+      const newQty = req.body.quantity !== undefined ? roundQuantity(req.body.quantity) : ingredient.quantity;
       const newExpiry = req.body.expiryDate !== undefined ? (req.body.expiryDate ? new Date(req.body.expiryDate) : null) : ingredient.expiryDate;
 
-      const diff = newQty - ingredient.quantity;
+      const diff = roundQuantity(newQty - ingredient.quantity);
       if (diff !== 0 || (req.body.expiryDate !== undefined && String(newExpiry) !== String(ingredient.expiryDate))) {
         if (diff > 0) {
           await IngredientLot.create({
             ingredient: ingredient._id,
             quantity: diff,
+            remainingQuantity: diff,
+            unit: updates.unit || ingredient.unit,
             expiryDate: newExpiry,
             type: 'IN',
             reason: 'Owner dashboard update',
@@ -203,6 +225,12 @@ router.patch('/stock/:id', ownerOnly, async (req, res) => {
     }
 
     await syncIngredientState(ingredient._id);
+    if (updates.unit !== undefined) {
+      await IngredientLot.updateMany(
+        { ingredient: ingredient._id, type: 'IN' },
+        { $set: { unit: updates.unit } },
+      );
+    }
     const saved = await Ingredient.findById(ingredient._id);
     res.json(toStockLot(saved));
   } catch (err) {

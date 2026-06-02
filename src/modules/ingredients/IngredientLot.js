@@ -24,6 +24,10 @@ const ingredientLotSchema = new mongoose.Schema(
 
 // Pre-save to set remainingQuantity for "IN" lots if not provided
 ingredientLotSchema.pre("save", function () {
+  if (this.quantity !== undefined) this.quantity = Math.round(Number(this.quantity || 0) * 100) / 100;
+  if (this.remainingQuantity !== undefined) {
+    this.remainingQuantity = Math.round(Number(this.remainingQuantity || 0) * 100) / 100;
+  }
   if (this.type === "IN" && this.remainingQuantity === 0 && this.quantity > 0) {
     if (!this.isNew) return;
     this.remainingQuantity = this.quantity;

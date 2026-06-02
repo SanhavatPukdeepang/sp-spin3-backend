@@ -40,7 +40,18 @@ export const processPayment = async (req, res) => {
     const requirements = await buildIngredientRequirements(order.orderList);
     const stockError = validateIngredientRequirements(requirements);
     if (stockError) {
-      return res.status(400).json({ message: stockError });
+      const shouldClearOrder = order.status === 'pending' && !order.payment?.paidAt;
+      if (shouldClearOrder) {
+        await Order.findByIdAndDelete(order._id);
+      }
+
+      return res.status(409).json({
+        message: shouldClearOrder
+          ? `Cannot process payment because ${stockError}. The order has been cleared. Please create a new order with available menu quantities.`
+          : `Cannot process payment because ${stockError}.`,
+        reason: stockError,
+        orderCleared: shouldClearOrder,
+      });
     }
 
     // Simulate payment gateway integration (replace with real gateway call)

@@ -8,6 +8,8 @@ const toNumber = (value) => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+const roundQuantity = (value) => Math.round(toNumber(value) * 100) / 100;
+
 const isExpired = (ingredient, now = new Date()) => {
   if (!ingredient?.expiryDate) return false;
   const expiry = new Date(ingredient.expiryDate);
@@ -25,7 +27,7 @@ export async function syncIngredientState(ingredientId) {
     remainingQuantity: { $gt: 0 },
   }).sort({ expiryDate: 1 });
 
-  const totalQuantity = activeLots.reduce((sum, lot) => sum + lot.remainingQuantity, 0);
+  const totalQuantity = roundQuantity(activeLots.reduce((sum, lot) => sum + lot.remainingQuantity, 0));
   const earliestExpiry = activeLots.length > 0 ? activeLots[0].expiryDate : null;
   const latestExpiredLot = totalQuantity > 0
     ? null
@@ -59,7 +61,8 @@ export async function syncIngredientState(ingredientId) {
  * and creates an appropriate transaction record (OUT, ADJUSTMENT, WASTE, etc.)
  */
 export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason = '') {
-  let remainingToConsume = amount;
+  const normalizedAmount = roundQuantity(amount);
+  let remainingToConsume = normalizedAmount;
   
   // Find active batches (IN entries) sorted by expiry date (FIFO)
   const activeLots = await IngredientLot.find({
@@ -72,15 +75,15 @@ export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason
     if (remainingToConsume <= 0) break;
 
     const toConsumeFromThisLot = Math.min(lot.remainingQuantity, remainingToConsume);
-    lot.remainingQuantity -= toConsumeFromThisLot;
-    remainingToConsume -= toConsumeFromThisLot;
+    lot.remainingQuantity = roundQuantity(lot.remainingQuantity - toConsumeFromThisLot);
+    remainingToConsume = roundQuantity(remainingToConsume - toConsumeFromThisLot);
     await lot.save();
   }
 
   // Create a record for this consumption
   await IngredientLot.create({
     ingredient: ingredientId,
-    quantity: -amount,
+    quantity: -normalizedAmount,
     type,
     reason: reason || (type === 'OUT' ? 'Stock consumption' : ''),
   });
