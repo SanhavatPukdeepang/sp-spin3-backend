@@ -24,9 +24,13 @@ const allowedOrigins = [
 ]
 
 app.use(helmet())
-app.use(cors({allowlist: allowedOrigins, credentials: true
-    }
-))
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    return callback(new Error(`Not allowed by CORS: ${origin}`))
+  },
+  credentials: true,
+}))
 app.use(express.json())
 app.use('/api/api', ownerCompatRoutes)
 app.use('/api', apiRoutes)

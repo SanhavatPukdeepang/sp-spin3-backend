@@ -5,8 +5,9 @@ let clients = [];
 
 export const sseHandler = (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
   const clientId = Date.now();
@@ -20,8 +21,12 @@ export const sseHandler = (req, res) => {
 
   // Send initial heartbeat or "connected" message
   res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+  const heartbeat = setInterval(() => {
+    res.write(': keep-alive\n\n');
+  }, 25000);
 
   req.on('close', () => {
+    clearInterval(heartbeat);
     clients = clients.filter(client => client.id !== clientId);
     console.log(`SSE Client disconnected: ${clientId}. Total clients: ${clients.length}`);
   });
