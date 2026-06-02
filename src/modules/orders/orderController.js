@@ -11,6 +11,10 @@ const normalizeOrderItemQuantity = (quantity) => {
 
 export const buildIngredientRequirements = async (orderList = []) => {
   const requirements = new Map();
+  requirements.errors = [];
+  const addRequirementError = (message) => {
+    if (!requirements.errors.includes(message)) requirements.errors.push(message);
+  };
   const menuIds = [
     ...new Set(
       orderList
@@ -27,12 +31,18 @@ export const buildIngredientRequirements = async (orderList = []) => {
 
   orderList.forEach((item) => {
     const menu = menuMap.get(String(item.menu_id || ''));
-    if (!menu) return;
+    if (!menu) {
+      addRequirementError(`${item?.name || 'Menu item'} is not available`);
+      return;
+    }
 
     const orderQuantity = normalizeOrderItemQuantity(item.quantity);
     menu.ingredients.forEach((entry) => {
       const ingredient = entry.ingredient;
-      if (!ingredient) return;
+      if (!ingredient) {
+        addRequirementError(`${menu.name || item?.name || 'Menu item'} has missing stock data`);
+        return;
+      }
 
       const ingredientId = String(ingredient._id);
       const requiredQuantity = Number(entry.quantity || 0) * orderQuantity;
@@ -49,6 +59,10 @@ export const buildIngredientRequirements = async (orderList = []) => {
 };
 
 export const validateIngredientRequirements = (requirements) => {
+  if (Array.isArray(requirements?.errors) && requirements.errors.length > 0) {
+    return requirements.errors[0];
+  }
+
   for (const { ingredient, requiredQuantity } of requirements.values()) {
     if (ingredient.active_status === false) {
       return `${ingredient.name} is not active`;
