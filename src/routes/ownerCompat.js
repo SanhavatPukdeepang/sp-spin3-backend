@@ -52,6 +52,7 @@ const getOrderTotal = (order) => {
   }
 
   return (order.orderList || []).reduce((sum, item) => {
+    if (['cancel', 'cancelled'].includes(item.status)) return sum;
     const price = Number(item.price_at_purchase ?? item.price ?? 0);
     const quantity = Number(item.quantity || 0);
     return sum + price * quantity;
@@ -68,6 +69,7 @@ const toOwnerOrder = (order) => ({
     quantity: item.quantity,
     price: item.price_at_purchase ?? item.price ?? 0,
     status: item.status || 'InKitchen',
+    note: item.note || '',
   })),
   total: getOrderTotal(order),
   tableId: order.tableId || '',
@@ -101,6 +103,7 @@ const toOwnerOrderDetail = async (order) => {
         quantity: item.quantity,
         price: item.price_at_purchase ?? item.price ?? 0,
         status: item.status || 'InKitchen',
+        note: item.note || '',
         menu: menu ? {
           id: String(menu._id),
           name: menu.name,
@@ -138,6 +141,7 @@ const buildOrderUpdates = (body) => {
       price: Number(item.price || 0),
       price_at_purchase: Number(item.price || 0),
       status: item.status || 'InKitchen',
+      note: item.note || '',
     }));
   }
   if (body.total !== undefined) {
@@ -156,6 +160,7 @@ const normalizeOrderItems = (items = []) => items.map((item) => ({
   price: Number(item.price || 0),
   price_at_purchase: Number(item.price || 0),
   status: item.status || 'InKitchen',
+  note: item.note || '',
 }));
 
 router.use('/auth', authRouter);

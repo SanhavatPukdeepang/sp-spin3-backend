@@ -34,6 +34,7 @@ export const embeddedOrderItemSchema = new mongoose.Schema(
     price: { type: Number },
     price_at_purchase: { type: Number },
     image: { type: String },
+    note: { type: String },
     cookingTime: { type: Number },
     status: {
       type: String,
