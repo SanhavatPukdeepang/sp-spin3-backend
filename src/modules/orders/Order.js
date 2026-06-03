@@ -10,7 +10,8 @@ const orderSchema = new mongoose.Schema({
     name: { type: String },
     contact: { type: String },
     address: { type: String },
-    note: { type: String }
+    note: { type: String },
+    kitchenNote: { type: String }
   },
   bookingDate: { type: String },
   bookingTime: { type: String },

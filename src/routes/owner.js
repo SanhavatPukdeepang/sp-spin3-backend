@@ -55,6 +55,7 @@ const getOrderTotal = (order) => {
   }
 
   return (order.orderList || []).reduce((sum, item) => {
+    if (['cancel', 'cancelled'].includes(item.status)) return sum;
     const price = Number(item.price_at_purchase ?? item.price ?? 0);
     const quantity = Number(item.quantity || 0);
     return sum + price * quantity;

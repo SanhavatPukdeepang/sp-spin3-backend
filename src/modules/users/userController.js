@@ -2,9 +2,69 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from './User.js';
 
+const serializeUser = (user, includeTimestamps = false) => {
+  const payload = {
+    id: user._id,
+    name: user.name,
+    surname: user.surname,
+    username: user.username,
+    email: user.email,
+    phone: user.phone || '',
+    role: user.role,
+    addresses: Array.isArray(user.addresses) ? user.addresses : [],
+    active_status: user.active_status,
+  };
+
+  if (includeTimestamps) {
+    payload.createdAt = user.createdAt;
+    payload.updatedAt = user.updatedAt;
+  }
+
+  return payload;
+};
+
+const normalizeAddresses = (addresses = [], user) => {
+  if (!Array.isArray(addresses)) return undefined;
+
+  const normalized = addresses
+    .slice(0, 10)
+    .map((address) => ({
+      _id: address._id,
+      addressName: String(address.addressName || address.name || address.tag || 'Home').trim(),
+      tag: ['Home', 'Work', 'Other'].includes(address.tag) ? address.tag : 'Other',
+      firstname: String(address.firstname || user.name || '').trim(),
+      lastname: String(address.lastname || user.surname || '').trim(),
+      address: String(address.address || address.detail || '').trim(),
+      isDefault: address.isDefault === true,
+    }))
+    .filter((address) => address.address);
+
+  if (normalized.length > 0 && !normalized.some((address) => address.isDefault)) {
+    normalized[0].isDefault = true;
+  }
+
+  let defaultFound = false;
+  return normalized.map((address) => {
+    if (address.isDefault && !defaultFound) {
+      defaultFound = true;
+      return address;
+    }
+
+    return { ...address, isDefault: false };
+  });
+};
+
 export const register = async (req, res) => {
   try {
-    const { name, surname, username, email, password } = req.body;
+    const { name, surname, username, email, password, phone, address, addressName } = req.body;
+
+    if (!phone || !String(phone).trim()) {
+      return res.status(400).json({ message: 'Phone number is required' });
+    }
+
+    if (!address || !String(address).trim()) {
+      return res.status(400).json({ message: 'Address is required' });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ email }, { username }] });
@@ -20,6 +80,15 @@ export const register = async (req, res) => {
       username,
       email,
       password: hashedPassword,
+      phone: String(phone).trim(),
+      addresses: [{
+        addressName: String(addressName || 'Home').trim(),
+        tag: 'Home',
+        firstname: name,
+        lastname: surname,
+        address: String(address).trim(),
+        isDefault: true,
+      }],
       role: 'customer'
     });
 
@@ -33,14 +102,7 @@ export const register = async (req, res) => {
 
     res.status(201).json({
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        surname: user.surname,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-      }
+      user: serializeUser(user)
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -66,14 +128,7 @@ export const login = async (req, res) => {
 
     res.json({
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        surname: user.surname,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-      },
+      user: serializeUser(user),
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -85,17 +140,7 @@ export const getMe = async (req, res) => {
     const user = await User.findById(req.user.id).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    res.json({
-      id: user._id,
-      name: user.name,
-      surname: user.surname,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      active_status: user.active_status,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-    });
+    res.json(serializeUser(user, true));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -103,7 +148,7 @@ export const getMe = async (req, res) => {
 
 export const updateMe = async (req, res) => {
   try {
-    const { name, surname, username, email } = req.body;
+    const { name, surname, username, email, phone, addresses } = req.body;
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -121,18 +166,14 @@ export const updateMe = async (req, res) => {
 
     if (name) user.name = name;
     if (surname) user.surname = surname;
+    if (phone !== undefined) user.phone = String(phone || '').trim();
+
+    const normalizedAddresses = normalizeAddresses(addresses, user);
+    if (normalizedAddresses) user.addresses = normalizedAddresses;
 
     await user.save();
 
-    res.json({
-      id: user._id,
-      name: user.name,
-      surname: user.surname,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      active_status: user.active_status,
-    });
+    res.json(serializeUser(user));
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

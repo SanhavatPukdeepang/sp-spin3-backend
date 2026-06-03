@@ -84,10 +84,12 @@ export const deductIngredientRequirements = async (requirements) => {
 const ITEM_DONE_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelled']);
 const ITEM_ACTIVE_STATUSES = new Set(['Cook', 'preparing']);
 const ORDER_TERMINAL_STATUSES = new Set(['completed', 'delivered', 'cancelled']);
+const ITEM_CANCELLED_STATUSES = new Set(['cancel', 'cancelled']);
 
 export const calculateOrderTotal = (order) => {
   const items = Array.isArray(order?.orderList) ? order.orderList : [];
   const subtotal = items.reduce((sum, item) => {
+    if (ITEM_CANCELLED_STATUSES.has(item?.status)) return sum;
     const quantity = normalizeOrderItemQuantity(item.quantity);
     return sum + Number(item.price || item.price_at_purchase || 0) * quantity;
   }, 0);
