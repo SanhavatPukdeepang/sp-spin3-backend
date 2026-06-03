@@ -7,8 +7,8 @@ const addressSchema = new mongoose.Schema({
     enum: ['Home', 'Work', 'Other'],
     default: 'Home'
   },
-  firstname: { type: String, trim: true },
-  lastname: { type: String, trim: true },
+  username: { type: String, trim: true },
+  phone: { type: String, trim: true },
   address: { type: String, trim: true, required: true },
   isDefault: { type: Boolean, default: false }
 }, { _id: true })

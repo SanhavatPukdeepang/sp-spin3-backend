@@ -32,8 +32,8 @@ const normalizeAddresses = (addresses = [], user) => {
       _id: address._id,
       addressName: String(address.addressName || address.name || address.tag || 'Home').trim(),
       tag: ['Home', 'Work', 'Other'].includes(address.tag) ? address.tag : 'Other',
-      firstname: String(address.firstname || user.name || '').trim(),
-      lastname: String(address.lastname || user.surname || '').trim(),
+      username: String(address.username || user.username || '').trim(),
+      phone: String(address.phone || user.phone || '').trim(),
       address: String(address.address || address.detail || '').trim(),
       isDefault: address.isDefault === true,
     }))
@@ -84,8 +84,8 @@ export const register = async (req, res) => {
       addresses: [{
         addressName: String(addressName || 'Home').trim(),
         tag: 'Home',
-        firstname: name,
-        lastname: surname,
+        username: username,
+        phone: String(phone).trim(),
         address: String(address).trim(),
         isDefault: true,
       }],
