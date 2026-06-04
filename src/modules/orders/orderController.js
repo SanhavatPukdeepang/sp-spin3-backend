@@ -179,6 +179,12 @@ export const createOrder = async (req, res) => {
   try {
     await processExpiredIngredientLots({ broadcast: false });
     const user = await User.findById(req.user.id).select('phone');
+    const safeOrderBody = { ...req.body };
+    delete safeOrderBody.payment;
+    delete safeOrderBody.status;
+    delete safeOrderBody.user_id;
+    delete safeOrderBody.deliveredAt;
+    delete safeOrderBody.evidenceImage;
     const orderList = Array.isArray(req.body.orderList)
       ? req.body.orderList.map((item) => ({
           ...item,
@@ -193,7 +199,7 @@ export const createOrder = async (req, res) => {
     }
 
     const order = new Order({
-      ...req.body,
+      ...safeOrderBody,
       user_id: String(req.user.id),
       customer: {
         ...(req.body.customer || {}),
