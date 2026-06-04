@@ -23,6 +23,7 @@ const orderSchema = new mongoose.Schema({
     paidAt: { type: Date }
   },
   riderNote: { type: String },
+  evidenceImage: { type: String },
   deliveredAt: { type: Date },
   status: { 
     type: String, 

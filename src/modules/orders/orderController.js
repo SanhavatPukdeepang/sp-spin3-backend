@@ -1,6 +1,7 @@
 import { Order } from './Order.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
 import { Menu } from '../menus/Menu.js';
+import { User } from '../users/User.js';
 import { processExpiredIngredientLots, consumeFromLots, syncIngredientState } from '../ingredients/inventoryLifecycle.js';
 
 const normalizeOrderItemQuantity = (quantity) => {
@@ -160,6 +161,7 @@ export const getOrderById = async (req, res) => {
 export const createOrder = async (req, res) => {
   try {
     await processExpiredIngredientLots({ broadcast: false });
+    const user = await User.findById(req.user.id).select('phone');
     const orderList = Array.isArray(req.body.orderList)
       ? req.body.orderList.map((item) => ({
           ...item,
@@ -177,6 +179,7 @@ export const createOrder = async (req, res) => {
       ...req.body,
       customer: {
         ...(req.body.customer || {}),
+        contact: req.body.customer?.contact || req.body.customer?.phone || user?.phone || '',
         userId: String(req.user.id),
       },
       orderList,
@@ -239,6 +242,7 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     if (req.body.riderNote !== undefined) updates.riderNote = req.body.riderNote;
+    if (req.body.evidenceImage !== undefined) updates.evidenceImage = req.body.evidenceImage;
 
     const updatedOrder = await Order.findByIdAndUpdate(req.params.id, updates, { new: true });
     res.json(updatedOrder);
