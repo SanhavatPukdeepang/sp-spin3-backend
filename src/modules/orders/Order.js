@@ -3,6 +3,7 @@ import { embeddedOrderItemSchema } from '../orderItems/OrderItem.js';
  
 const orderSchema = new mongoose.Schema({
   type: { type: String, enum: ['delivery', 'Onsite'], required: true },
+  user_id: { type: String, required: true },
   customer: {
     userId: { type: String },
     email: { type: String },
@@ -15,6 +16,7 @@ const orderSchema = new mongoose.Schema({
   },
   bookingDate: { type: String },
   bookingTime: { type: String },
+  note_global: { type: String },
   orderList: [embeddedOrderItemSchema],
   payment: {
     method: { type: String },
@@ -22,7 +24,7 @@ const orderSchema = new mongoose.Schema({
     transactionId: { type: String },
     paidAt: { type: Date }
   },
-  riderNote: { type: String },
+  evidenceImage: { type: String },
   deliveredAt: { type: Date },
   status: { 
     type: String, 
