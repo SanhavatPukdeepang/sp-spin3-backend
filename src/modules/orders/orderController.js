@@ -1,12 +1,30 @@
 import { Order } from './Order.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
 import { Menu } from '../menus/Menu.js';
+import { User } from '../users/User.js';
+import cloudinary from '../../configs/cloudinary.js';
 import { processExpiredIngredientLots, consumeFromLots, syncIngredientState } from '../ingredients/inventoryLifecycle.js';
 
 const normalizeOrderItemQuantity = (quantity) => {
   const numericQuantity = Number(quantity);
   if (!Number.isFinite(numericQuantity) || numericQuantity < 1) return 1;
   return Math.trunc(numericQuantity);
+};
+
+const isDataImage = (value) =>
+  typeof value === 'string' && /^data:image\/(png|jpe?g|webp);base64,/i.test(value);
+
+const uploadDeliveryEvidence = async (image, orderId) => {
+  if (!isDataImage(image)) return image;
+
+  const result = await cloudinary.uploader.upload(image, {
+    folder: 'delivered picture',
+    public_id: `order-${orderId}-${Date.now()}`,
+    resource_type: 'image',
+    transformation: [{ width: 1200, height: 1200, crop: 'limit' }],
+  });
+
+  return result.secure_url;
 };
 
 export const buildIngredientRequirements = async (orderList = []) => {
@@ -99,7 +117,7 @@ export const calculateOrderTotal = (order) => {
 
 const isOrderOwner = (order, user) => {
   if (!order || !user?.id) return false;
-  return String(order.customer?.userId || '') === String(user.id);
+  return String(order.user_id || order.customer?.userId || '') === String(user.id);
 };
 
 const canReadOrder = (order, user) => {
@@ -135,7 +153,7 @@ export const getOrders = async (req, res) => {
     await processExpiredIngredientLots();
     const query =
       req.user?.role === 'customer'
-        ? { 'customer.userId': String(req.user.id) }
+        ? { $or: [{ user_id: String(req.user.id) }, { 'customer.userId': String(req.user.id) }] }
         : {};
     const orders = await Order.find(query).sort({ createdAt: -1 });
     const reconciledOrders = await Promise.all(orders.map(reconcileOrderStatus));
@@ -160,6 +178,7 @@ export const getOrderById = async (req, res) => {
 export const createOrder = async (req, res) => {
   try {
     await processExpiredIngredientLots({ broadcast: false });
+    const user = await User.findById(req.user.id).select('phone');
     const orderList = Array.isArray(req.body.orderList)
       ? req.body.orderList.map((item) => ({
           ...item,
@@ -175,8 +194,10 @@ export const createOrder = async (req, res) => {
 
     const order = new Order({
       ...req.body,
+      user_id: String(req.user.id),
       customer: {
         ...(req.body.customer || {}),
+        contact: req.body.customer?.contact || req.body.customer?.phone || user?.phone || '',
         userId: String(req.user.id),
       },
       orderList,
@@ -238,7 +259,9 @@ export const updateOrderStatus = async (req, res) => {
       if (req.body.status === 'delivered') updates.deliveredAt = new Date();
     }
 
-    if (req.body.riderNote !== undefined) updates.riderNote = req.body.riderNote;
+    if (req.body.evidenceImage !== undefined) {
+      updates.evidenceImage = await uploadDeliveryEvidence(req.body.evidenceImage, order._id);
+    }
 
     const updatedOrder = await Order.findByIdAndUpdate(req.params.id, updates, { new: true });
     res.json(updatedOrder);
