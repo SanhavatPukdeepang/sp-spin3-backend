@@ -1,7 +1,7 @@
 import { Ingredient } from './Ingredient.js';
 import { IngredientLot } from './IngredientLot.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
-import { processExpiredIngredientLots, syncIngredientState, consumeFromLots } from './inventoryLifecycle.js';
+import { processExpiredIngredientLots, syncIngredientState, consumeFromLots, withInventoryTransaction } from './inventoryLifecycle.js';
 
 const parseRequiredExpiryDate = (expiryDate) => {
   if (!expiryDate) return null;
@@ -138,52 +138,60 @@ export async function addIngredientStock(req, res) {
       return res.status(400).json({ error: 'Expiry date is required for stock lots' });
     }
 
-    const ingredient = await Ingredient.findById(req.params.id);
-    if (!ingredient) {
-      return res.status(404).json({ error: 'Ingredient not found' });
-    }
+    const updatedIngredient = await withInventoryTransaction(async (session) => {
+      const ingredient = await Ingredient.findById(req.params.id).session(session);
+      if (!ingredient) {
+        const error = new Error('Ingredient not found');
+        error.statusCode = 404;
+        throw error;
+      }
 
-    await IngredientLot.create({
-      ingredient: ingredient._id,
-      quantity: normalizedQuantity,
-      remainingQuantity: normalizedQuantity,
-      unit: ingredient.unit,
-      expiryDate: lotExpiryDate,
-      type: 'IN',
-      reason: reason || 'New lot added',
+      await IngredientLot.create([{
+        ingredient: ingredient._id,
+        quantity: normalizedQuantity,
+        remainingQuantity: normalizedQuantity,
+        unit: ingredient.unit,
+        expiryDate: lotExpiryDate,
+        type: 'IN',
+        reason: reason || 'New lot added',
+      }], { session });
+
+      await syncIngredientState(ingredient._id, { session });
+      return Ingredient.findById(ingredient._id).session(session);
     });
-
-    await syncIngredientState(ingredient._id);
-    const updatedIngredient = await Ingredient.findById(ingredient._id);
 
     await broadcastIngredientSnapshot();
     res.json(updatedIngredient);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 
 export async function expireIngredientLot(req, res) {
   try {
-    const lotId = req.params.lotId;
-    const lot = await IngredientLot.findById(lotId).populate('ingredient');
-    
-    if (!lot || lot.type !== 'IN' || lot.remainingQuantity <= 0) {
-      return res.status(404).json({ error: 'Active lot not found' });
-    }
+    await withInventoryTransaction(async (session) => {
+      const lotId = req.params.lotId;
+      const lot = await IngredientLot.findById(lotId).populate('ingredient').session(session);
+      
+      if (!lot || lot.type !== 'IN' || lot.remainingQuantity <= 0) {
+        const error = new Error('Active lot not found');
+        error.statusCode = 404;
+        throw error;
+      }
 
-    const ingredient = lot.ingredient;
-    lot.expiryDate = getStartOfYesterday();
-    lot.reason = lot.reason || 'Manually marked expired';
-    await lot.save();
+      const ingredient = lot.ingredient;
+      lot.expiryDate = getStartOfYesterday();
+      lot.reason = lot.reason || 'Manually marked expired';
+      await lot.save({ session });
 
-    await processExpiredIngredientLots({ broadcast: false });
-    await syncIngredientState(ingredient._id);
+      await processExpiredIngredientLots({ broadcast: false, session });
+      await syncIngredientState(ingredient._id, { session });
+    });
     await broadcastIngredientSnapshot();
 
     res.json({ message: 'Lot expired successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 
@@ -192,45 +200,59 @@ export async function updateIngredientLot(req, res) {
     const { lotId } = req.params;
     const { quantity, remainingQuantity, expiryDate, reason } = req.body;
     
-    const lot = await IngredientLot.findById(lotId);
-    if (!lot) return res.status(404).json({ error: 'Lot not found' });
+    const lot = await withInventoryTransaction(async (session) => {
+      const ingredientLot = await IngredientLot.findById(lotId).session(session);
+      if (!ingredientLot) {
+        const error = new Error('Lot not found');
+        error.statusCode = 404;
+        throw error;
+      }
 
-    if (quantity !== undefined) lot.quantity = roundQuantity(quantity);
-    if (remainingQuantity !== undefined) lot.remainingQuantity = roundQuantity(remainingQuantity);
-    if (expiryDate !== undefined) lot.expiryDate = expiryDate ? new Date(expiryDate) : null;
-    if (reason !== undefined) lot.reason = reason;
-    if (lot.type === 'IN' && lot.remainingQuantity > 0 && !parseRequiredExpiryDate(lot.expiryDate)) {
-      return res.status(400).json({ error: 'Expiry date is required for active stock lots' });
-    }
+      if (quantity !== undefined) ingredientLot.quantity = roundQuantity(quantity);
+      if (remainingQuantity !== undefined) ingredientLot.remainingQuantity = roundQuantity(remainingQuantity);
+      if (expiryDate !== undefined) ingredientLot.expiryDate = expiryDate ? new Date(expiryDate) : null;
+      if (reason !== undefined) ingredientLot.reason = reason;
+      if (ingredientLot.type === 'IN' && ingredientLot.remainingQuantity > 0 && !parseRequiredExpiryDate(ingredientLot.expiryDate)) {
+        const error = new Error('Expiry date is required for active stock lots');
+        error.statusCode = 400;
+        throw error;
+      }
 
-    await lot.save();
-    if (lot.type === 'IN' && lot.remainingQuantity > 0 && isPastOrToday(lot.expiryDate)) {
-      await processExpiredIngredientLots({ broadcast: false });
-    }
-    await syncIngredientState(lot.ingredient);
+      await ingredientLot.save({ session });
+      if (ingredientLot.type === 'IN' && ingredientLot.remainingQuantity > 0 && isPastOrToday(ingredientLot.expiryDate)) {
+        await processExpiredIngredientLots({ broadcast: false, session });
+      }
+      await syncIngredientState(ingredientLot.ingredient, { session });
+      return ingredientLot;
+    });
     await broadcastIngredientSnapshot();
     
     res.json(lot);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 
 export async function deleteIngredientLot(req, res) {
   try {
     const { lotId } = req.params;
-    const lot = await IngredientLot.findById(lotId);
-    if (!lot) return res.status(404).json({ error: 'Lot not found' });
+    await withInventoryTransaction(async (session) => {
+      const lot = await IngredientLot.findById(lotId).session(session);
+      if (!lot) {
+        const error = new Error('Lot not found');
+        error.statusCode = 404;
+        throw error;
+      }
 
-    const ingredientId = lot.ingredient;
-    await IngredientLot.findByIdAndDelete(lotId);
-    
-    await syncIngredientState(ingredientId);
+      const ingredientId = lot.ingredient;
+      await IngredientLot.findByIdAndDelete(lotId).session(session);
+      await syncIngredientState(ingredientId, { session });
+    });
     await broadcastIngredientSnapshot();
     
     res.json({ message: 'Lot deleted successfully' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 
@@ -242,42 +264,48 @@ export async function updateIngredientStock(req, res) {
       return res.status(400).json({ error: 'Quantity must be a number' });
     }
 
-    const ingredient = await Ingredient.findById(req.params.id);
-    if (!ingredient) {
-      return res.status(404).json({ error: 'Ingredient not found' });
-    }
-
-    // Determine the type of change
-    const diff = roundQuantity(normalizedQuantity - ingredient.quantity);
-    if (diff === 0) return res.json(ingredient);
-
-    if (diff > 0) {
-      const lotExpiryDate = parseRequiredExpiryDate(expiryDate);
-      if (!lotExpiryDate) {
-        return res.status(400).json({ error: 'Expiry date is required when adding stock' });
+    const updatedIngredient = await withInventoryTransaction(async (session) => {
+      const ingredient = await Ingredient.findById(req.params.id).session(session);
+      if (!ingredient) {
+        const error = new Error('Ingredient not found');
+        error.statusCode = 404;
+        throw error;
       }
-      // Adding stock: Create an IN entry
-      await IngredientLot.create({
-        ingredient: ingredient._id,
-        quantity: diff,
-        remainingQuantity: diff,
-        unit: ingredient.unit,
-        expiryDate: lotExpiryDate,
-        type: 'IN',
-        reason: reason || 'Manual stock adjustment (Add)',
-      });
-    } else {
-      // Decreasing stock: Use the consume logic
-      await consumeFromLots(ingredient._id, Math.abs(diff), 'ADJUSTMENT', reason || 'Manual stock adjustment (Decrease)');
-    }
 
-    await syncIngredientState(ingredient._id);
-    const updatedIngredient = await Ingredient.findById(ingredient._id);
+      // Determine the type of change
+      const diff = roundQuantity(normalizedQuantity - ingredient.quantity);
+      if (diff === 0) return ingredient;
+
+      if (diff > 0) {
+        const lotExpiryDate = parseRequiredExpiryDate(expiryDate);
+        if (!lotExpiryDate) {
+          const error = new Error('Expiry date is required when adding stock');
+          error.statusCode = 400;
+          throw error;
+        }
+        // Adding stock: Create an IN entry
+        await IngredientLot.create([{
+          ingredient: ingredient._id,
+          quantity: diff,
+          remainingQuantity: diff,
+          unit: ingredient.unit,
+          expiryDate: lotExpiryDate,
+          type: 'IN',
+          reason: reason || 'Manual stock adjustment (Add)',
+        }], { session });
+      } else {
+        // Decreasing stock: Use the consume logic
+        await consumeFromLots(ingredient._id, Math.abs(diff), 'ADJUSTMENT', reason || 'Manual stock adjustment (Decrease)', { session });
+      }
+
+      await syncIngredientState(ingredient._id, { session });
+      return Ingredient.findById(ingredient._id).session(session);
+    });
 
     await broadcastIngredientSnapshot();
     res.json(updatedIngredient);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 
@@ -322,74 +350,87 @@ export async function updateIngredient(req, res) {
       }
     });
 
-    // Special handling for quantity and expiryDate if they are provided in the update
-    if (req.body.quantity !== undefined || req.body.expiryDate !== undefined) {
-      const ingredient = await Ingredient.findById(req.params.id);
-      if (!ingredient) return res.status(404).json({ error: 'Ingredient not found' });
+    const finalizedIngredient = await withInventoryTransaction(async (session) => {
+      // Special handling for quantity and expiryDate if they are provided in the update
+      if (req.body.quantity !== undefined || req.body.expiryDate !== undefined) {
+        const ingredient = await Ingredient.findById(req.params.id).session(session);
+        if (!ingredient) {
+          const error = new Error('Ingredient not found');
+          error.statusCode = 404;
+          throw error;
+        }
 
-      const newQty = req.body.quantity !== undefined ? roundQuantity(req.body.quantity) : ingredient.quantity;
-      const newExpiry = req.body.expiryDate !== undefined ? (req.body.expiryDate ? new Date(req.body.expiryDate) : null) : ingredient.expiryDate;
-      if (req.body.expiryDate !== undefined && newQty > 0 && !parseRequiredExpiryDate(newExpiry)) {
-        return res.status(400).json({ error: 'Expiry date is required for active stock' });
-      }
+        const newQty = req.body.quantity !== undefined ? roundQuantity(req.body.quantity) : ingredient.quantity;
+        const newExpiry = req.body.expiryDate !== undefined ? (req.body.expiryDate ? new Date(req.body.expiryDate) : null) : ingredient.expiryDate;
+        if (req.body.expiryDate !== undefined && newQty > 0 && !parseRequiredExpiryDate(newExpiry)) {
+          const error = new Error('Expiry date is required for active stock');
+          error.statusCode = 400;
+          throw error;
+        }
 
-      const diff = roundQuantity(newQty - ingredient.quantity);
-      if (diff !== 0 || (req.body.expiryDate !== undefined && String(newExpiry) !== String(ingredient.expiryDate))) {
-        if (diff > 0) {
-          if (!parseRequiredExpiryDate(newExpiry)) {
-            return res.status(400).json({ error: 'Expiry date is required when adding stock' });
-          }
-          await IngredientLot.create({
-            ingredient: ingredient._id,
-            quantity: diff,
-            remainingQuantity: diff,
-            unit: updates.unit || ingredient.unit,
-            expiryDate: newExpiry,
-            type: 'IN',
-            reason: 'Ingredient details update',
-          });
-        } else if (diff < 0) {
-          await consumeFromLots(ingredient._id, Math.abs(diff), 'ADJUSTMENT', 'Ingredient details update');
-        } else if (req.body.expiryDate !== undefined) {
-          // Update the earliest active lot's expiry
-          const earliestLot = await IngredientLot.findOne({
-            ingredient: ingredient._id,
-            type: 'IN',
-            remainingQuantity: { $gt: 0 },
-          }).sort({ expiryDate: 1, createdAt: 1 });
-          
-          if (earliestLot) {
-            earliestLot.expiryDate = newExpiry;
-            await earliestLot.save();
+        const diff = roundQuantity(newQty - ingredient.quantity);
+        if (diff !== 0 || (req.body.expiryDate !== undefined && String(newExpiry) !== String(ingredient.expiryDate))) {
+          if (diff > 0) {
+            if (!parseRequiredExpiryDate(newExpiry)) {
+              const error = new Error('Expiry date is required when adding stock');
+              error.statusCode = 400;
+              throw error;
+            }
+            await IngredientLot.create([{
+              ingredient: ingredient._id,
+              quantity: diff,
+              remainingQuantity: diff,
+              unit: updates.unit || ingredient.unit,
+              expiryDate: newExpiry,
+              type: 'IN',
+              reason: 'Ingredient details update',
+            }], { session });
+          } else if (diff < 0) {
+            await consumeFromLots(ingredient._id, Math.abs(diff), 'ADJUSTMENT', 'Ingredient details update', { session });
+          } else if (req.body.expiryDate !== undefined) {
+            // Update the earliest active lot's expiry
+            const earliestLot = await IngredientLot.findOne({
+              ingredient: ingredient._id,
+              type: 'IN',
+              remainingQuantity: { $gt: 0 },
+            }).sort({ expiryDate: 1, createdAt: 1 }).session(session);
+            
+            if (earliestLot) {
+              earliestLot.expiryDate = newExpiry;
+              await earliestLot.save({ session });
+            }
           }
         }
       }
-    }
 
-    const ingredient = await Ingredient.findByIdAndUpdate(
-      req.params.id,
-      updates,
-      { new: true, runValidators: true },
-    );
-
-    if (!ingredient) {
-      return res.status(404).json({ error: 'Ingredient not found' });
-    }
-
-    if (updates.unit !== undefined) {
-      await IngredientLot.updateMany(
-        { ingredient: ingredient._id, type: 'IN' },
-        { $set: { unit: updates.unit } },
+      const ingredient = await Ingredient.findByIdAndUpdate(
+        req.params.id,
+        updates,
+        { new: true, runValidators: true, session },
       );
-    }
 
-    await syncIngredientState(ingredient._id);
-    const finalizedIngredient = await Ingredient.findById(ingredient._id);
+      if (!ingredient) {
+        const error = new Error('Ingredient not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      if (updates.unit !== undefined) {
+        await IngredientLot.updateMany(
+          { ingredient: ingredient._id, type: 'IN' },
+          { $set: { unit: updates.unit } },
+          { session },
+        );
+      }
+
+      await syncIngredientState(ingredient._id, { session });
+      return Ingredient.findById(ingredient._id).session(session);
+    });
 
     await broadcastIngredientSnapshot();
     res.json(finalizedIngredient);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 
@@ -409,14 +450,15 @@ export async function decreaseIngredientStock(req, res) {
       return res.status(400).json({ error: 'Insufficient stock' });
     }
 
-    await consumeFromLots(ingredient._id, amount, 'OUT', reason);
-    await syncIngredientState(ingredient._id);
-    
-    const updatedIngredient = await Ingredient.findById(ingredient._id);
+    const updatedIngredient = await withInventoryTransaction(async (session) => {
+      await consumeFromLots(ingredient._id, amount, 'OUT', reason, { session });
+      await syncIngredientState(ingredient._id, { session });
+      return Ingredient.findById(ingredient._id).session(session);
+    });
     await broadcastIngredientSnapshot();
     res.json(updatedIngredient);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }
 
@@ -450,36 +492,38 @@ export async function createIngredient(req, res) {
       .select('ingredient_index');
     const nextIndex = Number(lastIngredient?.ingredient_index || 0) + 1;
 
-    const ingredient = new Ingredient({
-      ingredient_index: nextIndex,
-      name: trimmedName,
-      quantity: 0,
-      unit: String(unit).trim(),
-      price_per_unit: Number(price_per_unit),
-      low_stock_threshold: roundQuantity(low_stock_threshold || 0),
-      active_status: true,
-      expiryDate: expiryDate ? new Date(expiryDate) : null,
-    });
-
-    await ingredient.save();
-
-    if (initialQuantity > 0) {
-      await IngredientLot.create({
-        ingredient: ingredient._id,
-        quantity: roundQuantity(initialQuantity),
-        remainingQuantity: roundQuantity(initialQuantity),
-        unit: ingredient.unit,
-        expiryDate: initialLotExpiryDate,
-        type: 'IN',
-        reason: 'Initial setup',
+    const finalizedIngredient = await withInventoryTransaction(async (session) => {
+      const ingredient = new Ingredient({
+        ingredient_index: nextIndex,
+        name: trimmedName,
+        quantity: 0,
+        unit: String(unit).trim(),
+        price_per_unit: Number(price_per_unit),
+        low_stock_threshold: roundQuantity(low_stock_threshold || 0),
+        active_status: true,
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
       });
-      await syncIngredientState(ingredient._id);
-    }
 
-    const finalizedIngredient = await Ingredient.findById(ingredient._id);
+      await ingredient.save({ session });
+
+      if (initialQuantity > 0) {
+        await IngredientLot.create([{
+          ingredient: ingredient._id,
+          quantity: roundQuantity(initialQuantity),
+          remainingQuantity: roundQuantity(initialQuantity),
+          unit: ingredient.unit,
+          expiryDate: initialLotExpiryDate,
+          type: 'IN',
+          reason: 'Initial setup',
+        }], { session });
+        await syncIngredientState(ingredient._id, { session });
+      }
+
+      return Ingredient.findById(ingredient._id).session(session);
+    });
     await broadcastIngredientSnapshot();
     res.status(201).json(finalizedIngredient);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ error: err.message });
   }
 }

@@ -31,4 +31,7 @@ const tableSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+tableSchema.index({ status: 1 });
+tableSchema.index({ active_status: 1, status: 1 });
+
 export const Table = mongoose.model("Table", tableSchema);

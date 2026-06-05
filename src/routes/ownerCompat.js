@@ -3,10 +3,12 @@ import { router as authRouter } from './auth.js';
 import { router as menuRouter } from './menu.js';
 import { router as ownerRouter } from './owner.js';
 import { router as tableRouter } from './table.js';
+import { isAuth, isEligible } from '../middleware/auth.js';
 import { Menu } from '../modules/menus/Menu.js';
 import { Order } from '../modules/orders/Order.js';
 
 export const router = Router();
+const orderAdminAccess = [isAuth, isEligible('owner', 'cashier')];
 
 const toOwnerOrderType = (type) => {
   if (type === 'delivery') return 'Delivery';
@@ -168,7 +170,7 @@ router.use('/owner', ownerRouter);
 router.use('/menus', menuRouter);
 router.use('/tables', tableRouter);
 
-router.get('/orders', async (req, res) => {
+router.get('/orders', orderAdminAccess, async (req, res) => {
   try {
     const orders = await Order.find().sort({ createdAt: -1 });
     res.json(orders.map(toOwnerOrder));
@@ -177,7 +179,7 @@ router.get('/orders', async (req, res) => {
   }
 });
 
-router.get('/orders/:id', async (req, res) => {
+router.get('/orders/:id', orderAdminAccess, async (req, res) => {
   try {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -187,7 +189,7 @@ router.get('/orders/:id', async (req, res) => {
   }
 });
 
-router.patch('/orders/:id', async (req, res) => {
+router.patch('/orders/:id', orderAdminAccess, async (req, res) => {
   try {
     const order = await Order.findByIdAndUpdate(
       req.params.id,
@@ -202,13 +204,22 @@ router.patch('/orders/:id', async (req, res) => {
   }
 });
 
-router.post('/orders', async (req, res) => {
+router.post('/orders', orderAdminAccess, async (req, res) => {
   try {
     const items = Array.isArray(req.body.items) ? req.body.items : [];
     const total = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
     const order = await Order.create({
       type: toBackendOrderType(req.body.type || 'In-Restaurant'),
+      user_id: String(req.user.id),
+      customerId: req.user.id,
       customer: req.body.customer || {},
+      customerSnapshot: {
+        name: req.body.customer?.name || '',
+        phone: req.body.customer?.phone || req.body.customer?.contact || '',
+        email: req.body.customer?.email || '',
+        address: req.body.customer?.address || '',
+        note: req.body.customer?.note || '',
+      },
       orderList: normalizeOrderItems(items),
       payment: {
         amount: Number(req.body.total ?? total),
@@ -223,7 +234,7 @@ router.post('/orders', async (req, res) => {
   }
 });
 
-router.delete('/orders/:id', async (req, res) => {
+router.delete('/orders/:id', orderAdminAccess, async (req, res) => {
   try {
     const order = await Order.findByIdAndDelete(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });

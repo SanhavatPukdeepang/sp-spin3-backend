@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Ingredient } from './Ingredient.js';
 import { IngredientLot } from './IngredientLot.js';
 import { Waste } from '../wastes/Waste.js';
@@ -10,6 +11,27 @@ const toNumber = (value) => {
 
 const roundQuantity = (value) => Math.round(toNumber(value) * 100) / 100;
 
+const createInventoryError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+export async function withInventoryTransaction(work, { session } = {}) {
+  if (session) return work(session);
+
+  const ownedSession = await mongoose.startSession();
+  try {
+    let result;
+    await ownedSession.withTransaction(async () => {
+      result = await work(ownedSession);
+    });
+    return result;
+  } finally {
+    await ownedSession.endSession();
+  }
+}
+
 const isExpired = (ingredient, now = new Date()) => {
   if (!ingredient?.expiryDate) return false;
   const expiry = new Date(ingredient.expiryDate);
@@ -20,12 +42,12 @@ const isExpired = (ingredient, now = new Date()) => {
 /**
  * Syncs the total quantity and earliest expiry date of an ingredient from its active batches (IN entries)
  */
-export async function syncIngredientState(ingredientId) {
+export async function syncIngredientState(ingredientId, { session } = {}) {
   const activeLots = await IngredientLot.find({
     ingredient: ingredientId,
     type: 'IN',
     remainingQuantity: { $gt: 0 },
-  }).sort({ expiryDate: 1 });
+  }).sort({ expiryDate: 1 }).session(session || null);
 
   const totalQuantity = roundQuantity(activeLots.reduce((sum, lot) => sum + lot.remainingQuantity, 0));
   const earliestExpiry = activeLots.length > 0 ? activeLots[0].expiryDate : null;
@@ -34,9 +56,9 @@ export async function syncIngredientState(ingredientId) {
     : await IngredientLot.findOne({
       ingredient: ingredientId,
       type: 'EXPIRED',
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 }).session(session || null);
 
-  const ingredient = await Ingredient.findById(ingredientId);
+  const ingredient = await Ingredient.findById(ingredientId).session(session || null);
   if (ingredient) {
     ingredient.quantity = totalQuantity;
     ingredient.expiryDate = earliestExpiry;
@@ -52,7 +74,7 @@ export async function syncIngredientState(ingredientId) {
       ingredient.expiredAt = null;
     }
     
-    await ingredient.save();
+    await ingredient.save({ session });
   }
 }
 
@@ -60,8 +82,11 @@ export async function syncIngredientState(ingredientId) {
  * Consumes quantity from active batches (IN entries) in FIFO order (by expiry date)
  * and creates an appropriate transaction record (OUT, ADJUSTMENT, WASTE, etc.)
  */
-export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason = '') {
+export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason = '', { session } = {}) {
   const normalizedAmount = roundQuantity(amount);
+  if (normalizedAmount <= 0) {
+    throw createInventoryError('Amount must be positive');
+  }
   let remainingToConsume = normalizedAmount;
   
   // Find active batches (IN entries) sorted by expiry date (FIFO)
@@ -69,7 +94,14 @@ export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason
     ingredient: ingredientId,
     type: 'IN',
     remainingQuantity: { $gt: 0 },
-  }).sort({ expiryDate: 1, createdAt: 1 });
+  }).sort({ expiryDate: 1, createdAt: 1 }).session(session || null);
+
+  const availableQuantity = roundQuantity(
+    activeLots.reduce((sum, lot) => sum + toNumber(lot.remainingQuantity), 0),
+  );
+  if (availableQuantity < normalizedAmount) {
+    throw createInventoryError('Insufficient stock', 409);
+  }
 
   for (const lot of activeLots) {
     if (remainingToConsume <= 0) break;
@@ -77,88 +109,93 @@ export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason
     const toConsumeFromThisLot = Math.min(lot.remainingQuantity, remainingToConsume);
     lot.remainingQuantity = roundQuantity(lot.remainingQuantity - toConsumeFromThisLot);
     remainingToConsume = roundQuantity(remainingToConsume - toConsumeFromThisLot);
-    await lot.save();
+    await lot.save({ session });
   }
 
   // Create a record for this consumption
-  await IngredientLot.create({
+  const movement = new IngredientLot({
     ingredient: ingredientId,
     quantity: -normalizedAmount,
     type,
     reason: reason || (type === 'OUT' ? 'Stock consumption' : ''),
   });
+  await movement.save({ session });
 
   return remainingToConsume; // 0 if enough stock was available
 }
 
-export async function processExpiredIngredientLots({ broadcast = true } = {}) {
+export async function processExpiredIngredientLots({ broadcast = true, session } = {}) {
   const now = new Date();
-  
-  // Find all IN entries that have remaining quantity and are expired
-  const expiredLots = await IngredientLot.find({
-    type: 'IN',
-    remainingQuantity: { $gt: 0 },
-    expiryDate: { $ne: null, $lte: now },
-  }).populate('ingredient');
 
-  if (expiredLots.length === 0) {
-    return { expiredCount: 0, wastedQuantity: 0 };
-  }
+  const result = await withInventoryTransaction(async (activeSession) => {
+    // Find all IN entries that have remaining quantity and are expired
+    const expiredLots = await IngredientLot.find({
+      type: 'IN',
+      remainingQuantity: { $gt: 0 },
+      expiryDate: { $ne: null, $lte: now },
+    }).populate('ingredient').session(activeSession);
 
-  let wastedQuantity = 0;
-  const affectedIngredientIds = new Set();
+    if (expiredLots.length === 0) {
+      return { expiredCount: 0, wastedQuantity: 0 };
+    }
 
-  for (const lot of expiredLots) {
-    const ingredient = lot.ingredient;
-    if (!ingredient) continue;
+    let wastedQuantity = 0;
+    const affectedIngredientIds = new Set();
 
-    const quantity = toNumber(lot.remainingQuantity);
-    if (quantity <= 0) continue;
+    for (const lot of expiredLots) {
+      const ingredient = lot.ingredient;
+      if (!ingredient) continue;
 
-    // Create a Waste record
-    await Waste.create({
-      ingredient: ingredient._id,
-      ingredientLot: lot._id,
-      itemName: ingredient.name,
-      quantity,
-      unit: ingredient.unit,
-      estimatedCost: quantity * toNumber(ingredient.price_per_unit),
-      recordedBy: 'System',
-      date: now,
-      reason: 'Expired',
-      quantity_wasted: quantity,
-      total_cost: quantity * toNumber(ingredient.price_per_unit),
-    });
+      const quantity = toNumber(lot.remainingQuantity);
+      if (quantity <= 0) continue;
 
-    // Create an EXPIRED entry
-    await IngredientLot.create({
-      ingredient: ingredient._id,
-      quantity: -quantity,
-      type: 'EXPIRED',
-      reason: `Expired lot from ${lot.createdAt.toLocaleDateString()}`,
-    });
+      // Create a Waste record
+      await Waste.create([{
+        ingredient: ingredient._id,
+        ingredientLot: lot._id,
+        itemName: ingredient.name,
+        quantity,
+        unit: ingredient.unit,
+        estimatedCost: quantity * toNumber(ingredient.price_per_unit),
+        recordedBy: 'System',
+        date: now,
+        reason: 'Expired',
+        quantity_wasted: quantity,
+        total_cost: quantity * toNumber(ingredient.price_per_unit),
+      }], { session: activeSession });
 
-    // Mark the original batch as consumed
-    lot.remainingQuantity = 0;
-    await lot.save();
+      // Create an EXPIRED entry
+      await IngredientLot.create([{
+        ingredient: ingredient._id,
+        quantity: -quantity,
+        type: 'EXPIRED',
+        reason: `Expired lot from ${lot.createdAt.toLocaleDateString()}`,
+      }], { session: activeSession });
 
-    wastedQuantity += quantity;
-    affectedIngredientIds.add(String(ingredient._id));
-  }
+      // Mark the original batch as consumed
+      lot.remainingQuantity = 0;
+      await lot.save({ session: activeSession });
 
-  // Sync state for all affected ingredients
-  for (const ingredientId of affectedIngredientIds) {
-    await syncIngredientState(ingredientId);
-  }
+      wastedQuantity += quantity;
+      affectedIngredientIds.add(String(ingredient._id));
+    }
+
+    // Sync state for all affected ingredients
+    for (const ingredientId of affectedIngredientIds) {
+      await syncIngredientState(ingredientId, { session: activeSession });
+    }
+
+    return {
+      expiredCount: expiredLots.length,
+      wastedQuantity,
+    };
+  }, { session });
 
   if (broadcast) {
     await broadcastIngredientSnapshot();
   }
 
-  return {
-    expiredCount: expiredLots.length,
-    wastedQuantity,
-  };
+  return result;
 }
 
 export const hasIngredientExpired = isExpired;

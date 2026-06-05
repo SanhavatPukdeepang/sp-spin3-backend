@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Order } from './Order.js';
 import { Counter } from './Counter.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
@@ -30,7 +31,7 @@ const uploadDeliveryEvidence = async (image, orderId) => {
   return result.secure_url;
 };
 
-export const buildIngredientRequirements = async (orderList = []) => {
+export const buildIngredientRequirements = async (orderList = [], { session } = {}) => {
   const requirements = new Map();
   requirements.errors = [];
   const addRequirementError = (message) => {
@@ -47,7 +48,9 @@ export const buildIngredientRequirements = async (orderList = []) => {
 
   if (menuIds.length === 0) return requirements;
 
-  const menus = await Menu.find({ _id: { $in: menuIds } }).populate('ingredients.ingredient');
+  const menus = await Menu.find({ _id: { $in: menuIds } })
+    .populate('ingredients.ingredient')
+    .session(session || null);
   const menuMap = new Map(menus.map((menu) => [String(menu._id), menu]));
 
   orderList.forEach((item) => {
@@ -95,17 +98,17 @@ export const validateIngredientRequirements = (requirements) => {
   return '';
 };
 
-export const deductIngredientRequirements = async (requirements) => {
+export const deductIngredientRequirements = async (requirements, { session } = {}) => {
   for (const [ingredientId, { requiredQuantity }] of requirements.entries()) {
-    await consumeFromLots(ingredientId, requiredQuantity, 'OUT', 'Order placed');
-    await syncIngredientState(ingredientId);
+    await consumeFromLots(ingredientId, requiredQuantity, 'OUT', 'Order placed', { session });
+    await syncIngredientState(ingredientId, { session });
   }
 };
 
-const deductOrderInventoryIfNeeded = async (order) => {
+const deductOrderInventoryIfNeeded = async (order, { session } = {}) => {
   if (!order || order.inventoryDeductedAt) return;
 
-  const requirements = await buildIngredientRequirements(order.orderList);
+  const requirements = await buildIngredientRequirements(order.orderList, { session });
   const stockError = validateIngredientRequirements(requirements);
   if (stockError) {
     const error = new Error(`Cannot send order to kitchen because ${stockError}.`);
@@ -113,9 +116,8 @@ const deductOrderInventoryIfNeeded = async (order) => {
     throw error;
   }
 
-  await deductIngredientRequirements(requirements);
+  await deductIngredientRequirements(requirements, { session });
   order.inventoryDeductedAt = new Date();
-  await broadcastIngredientSnapshot();
 };
 
 const ITEM_DONE_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelled']);
@@ -136,7 +138,9 @@ export const calculateOrderTotal = (order) => {
 
 const isOrderOwner = (order, user) => {
   if (!order || !user?.id) return false;
-  return String(order.user_id || order.customer?.userId || '') === String(user.id);
+  return [order.customerId, order.user_id, order.customer?.userId]
+    .filter(Boolean)
+    .some((value) => String(value) === String(user.id));
 };
 
 const canReadOrder = (order, user) => {
@@ -172,7 +176,13 @@ export const getOrders = async (req, res) => {
     await processExpiredIngredientLots();
     const query =
       req.user?.role === 'customer'
-        ? { $or: [{ user_id: String(req.user.id) }, { 'customer.userId': String(req.user.id) }] }
+        ? {
+            $or: [
+              { customerId: req.user.id },
+              { user_id: String(req.user.id) },
+              { 'customer.userId': String(req.user.id) },
+            ],
+          }
         : {};
     const orders = await Order.find(query).sort({ createdAt: -1 });
     const reconciledOrders = await Promise.all(orders.map(reconcileOrderStatus));
@@ -238,10 +248,18 @@ export const createOrder = async (req, res) => {
       ...safeOrderBody,
       orderId: orderIdStr,
       user_id: String(req.user.id),
+      customerId: req.user.id,
       customer: {
         ...customerData,
         contact: customerData.contact || customerData.phone || user?.phone || '',
         userId: customerData.userId || String(req.user.id),
+      },
+      customerSnapshot: {
+        name: customerData.name || '',
+        phone: customerData.phone || customerData.contact || user?.phone || '',
+        email: customerData.email || '',
+        address: customerData.address || '',
+        note: customerData.note || '',
       },
       orderList,
       status: 'pending',
@@ -280,6 +298,7 @@ export const updateOrderItemStatus = async (req, res) => {
 };
 
 export const updateOrderStatus = async (req, res) => {
+  let session;
   try {
   const allowedStatuses = ['pending', 'reserved', 'checked-in', 'preparing', 'completed', 'delivery', 'finished', 'delivered', 'received', 'cancelled'];
     const updates = {};
@@ -297,12 +316,11 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
+    let shouldBroadcastIngredientSnapshot = false;
+
     if (req.body.status) {
       if (!allowedStatuses.includes(req.body.status)) {
         return res.status(400).json({ message: 'Invalid order status' });
-      }
-      if (req.body.status === 'preparing') {
-        await deductOrderInventoryIfNeeded(order);
       }
       updates.status = req.body.status;
       if (req.body.status === 'delivered') updates.deliveredAt = new Date();
@@ -315,11 +333,36 @@ export const updateOrderStatus = async (req, res) => {
     if (req.body.reservationPax !== undefined) updates.reservationPax = Number(req.body.reservationPax) || undefined;
 
     Object.assign(order, updates);
-    const updatedOrder = await order.save();
+
+    let updatedOrder;
+    if (req.body.status === 'preparing' && !order.inventoryDeductedAt) {
+      session = await mongoose.startSession();
+      await session.withTransaction(async () => {
+        const lockedOrder = await Order.findById(req.params.id).session(session);
+        if (!lockedOrder) {
+          const error = new Error('Order not found');
+          error.statusCode = 404;
+          throw error;
+        }
+
+        Object.assign(lockedOrder, updates);
+        await deductOrderInventoryIfNeeded(lockedOrder, { session });
+        updatedOrder = await lockedOrder.save({ session });
+      });
+      shouldBroadcastIngredientSnapshot = true;
+    } else {
+      updatedOrder = await order.save();
+    }
+
+    if (shouldBroadcastIngredientSnapshot) {
+      await broadcastIngredientSnapshot();
+    }
     await broadcastTableOrderUpdate();
     res.json(updatedOrder);
   } catch (err) {
     res.status(err.statusCode || 400).json({ message: err.message });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 

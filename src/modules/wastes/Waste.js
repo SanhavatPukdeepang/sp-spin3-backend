@@ -41,4 +41,7 @@ wasteSchema.pre("save", async function () {
     }
 });
 
+wasteSchema.index({ createdAt: -1 });
+wasteSchema.index({ ingredient: 1, createdAt: -1 });
+
 export const Waste = mongoose.model("Waste", wasteSchema);
