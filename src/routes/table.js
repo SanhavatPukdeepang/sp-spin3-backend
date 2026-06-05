@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { Table } from '../modules/tables/Table.js';
 import { Order } from '../modules/orders/Order.js';
+import { broadcastTableOrderUpdate } from '../realtime/tableOrderSocket.js';
 
 export const router = Router();
 
@@ -110,6 +111,7 @@ router.post('/', async (req, res) => {
       active_status: true,
     });
 
+    await broadcastTableOrderUpdate();
     res.status(201).json(toOwnerTable(table));
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -136,6 +138,7 @@ router.patch('/:id', async (req, res) => {
     });
 
     if (!table) return res.status(404).json({ message: 'Table not found' });
+    await broadcastTableOrderUpdate();
     res.json(toOwnerTable(table));
   } catch (err) {
     res.status(400).json({ message: err.message });

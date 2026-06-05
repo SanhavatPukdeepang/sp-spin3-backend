@@ -8,6 +8,7 @@ import { router as apiRoutes } from './routes/index.js'
 import { router as ownerCompatRoutes } from './routes/ownerCompat.js'
 import { processExpiredIngredientLots } from './modules/ingredients/inventoryLifecycle.js'
 import { initIngredientSocket } from './realtime/ingredientSocket.js'
+import { initTableOrderSocket } from './realtime/tableOrderSocket.js'
 
 dotenv.config()
 
@@ -37,6 +38,7 @@ app.use('/api', apiRoutes)
 
 await connectDB()
 initIngredientSocket(server)
+initTableOrderSocket(server)
 
 const sweepExpiredIngredientLots = async () => {
   try {

@@ -6,6 +6,7 @@ import { User } from '../users/User.js';
 import cloudinary from '../../configs/cloudinary.js';
 import { processExpiredIngredientLots, consumeFromLots, syncIngredientState } from '../ingredients/inventoryLifecycle.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
+import { broadcastTableOrderUpdate } from '../../realtime/tableOrderSocket.js';
 
 const normalizeOrderItemQuantity = (quantity) => {
   const numericQuantity = Number(quantity);
@@ -246,6 +247,7 @@ export const createOrder = async (req, res) => {
       status: 'pending',
     });
     const newOrder = await order.save();
+    await broadcastTableOrderUpdate();
     res.status(201).json(newOrder);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -269,7 +271,9 @@ export const updateOrderItemStatus = async (req, res) => {
     );
     if (!order) return res.status(404).json({ message: 'Order or item not found' });
 
-    res.json(await reconcileOrderStatus(order));
+    const reconciled = await reconcileOrderStatus(order);
+    await broadcastTableOrderUpdate();
+    res.json(reconciled);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -312,6 +316,7 @@ export const updateOrderStatus = async (req, res) => {
 
     Object.assign(order, updates);
     const updatedOrder = await order.save();
+    await broadcastTableOrderUpdate();
     res.json(updatedOrder);
   } catch (err) {
     res.status(err.statusCode || 400).json({ message: err.message });
