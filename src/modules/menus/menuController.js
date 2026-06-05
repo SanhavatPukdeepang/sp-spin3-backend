@@ -4,6 +4,7 @@ import { Ingredient } from '../ingredients/Ingredient.js';
 import { processExpiredIngredientLots } from '../ingredients/inventoryLifecycle.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
 import { broadcastSSE } from '../../utils/sse.js';
+import { getDefaultMenuImage } from './menuImages.js';
 
 const countBasedUnits = new Set(['piece', 'pieces', 'jar', 'jars', 'bottle', 'bottles']);
 
@@ -71,6 +72,7 @@ const withStockStatus = (menu) => {
 
   return {
     ...item,
+    image: item.image || getDefaultMenuImage(item.name),
     soldOut: item.available === false || missingIngredients.length > 0,
     soldOutReason:
       item.available === false

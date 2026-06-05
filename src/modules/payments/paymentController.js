@@ -8,6 +8,9 @@ import { broadcastTableOrderUpdate } from '../../realtime/tableOrderSocket.js';
 
 const isStaffPaymentUser = (user) => ['owner', 'cashier'].includes(user?.role);
 const isOrderOwner = (order, user) => String(order.customer?.userId || '') === String(user?.id || '');
+const isReservationOrder = (order) =>
+  String(order?.customer?.note || '').split('|')[0] === 'reserve' ||
+  Boolean(order?.reservationPax && order?.bookingDate && order?.bookingTime);
 
 export const processPayment = async (req, res) => {
   try {
@@ -64,16 +67,19 @@ export const processPayment = async (req, res) => {
       return res.status(402).json({ message: 'Payment failed' });
     }
 
-    order.status = 'pending';
+    order.status = isReservationOrder(order) ? 'reserved' : 'pending';
+    const slipUrl = req.file?.path || '';
+
     order.payment = {
       method: paymentMethod,
       amount: numericAmount,
       transactionId: paymentResult.transactionId,
+      ...(slipUrl ? { slipUrl } : {}),
       paidAt: new Date()
     };
 
-    if (req.file) {
-      order.evidenceImage = req.file.path;
+    if (slipUrl) {
+      order.evidenceImage = slipUrl;
     }
 
     await order.save();
@@ -85,7 +91,8 @@ export const processPayment = async (req, res) => {
       orderId: order._id,
       status: order.status,
       transactionId: paymentResult.transactionId,
-      evidenceImage: order.evidenceImage
+      evidenceImage: order.evidenceImage,
+      slipUrl: order.payment?.slipUrl || ''
     });
   } catch (err) {
     console.error('processPayment error', err);

@@ -1,0 +1,30 @@
+export const menuImageByName = {
+  'Signature 8pc Bucket': '/images/menu-sig8pcbuc.png',
+  'Party Pack 20pc': '/images/menu-partypack.png',
+  'Zabb Team Box': '/images/menu-zabbteambox.png',
+  'Smile Bucket': '/images/menu-smilebucket2.png',
+  'Chick N Share': '/images/menu-chicknshare.png',
+  'Spicy Chicken Sandwich': '/images/menu-spicychicksand.png',
+  'Classic Sandwich': '/images/menu-classsandwich.png',
+  'Zinger Double': '/images/menu-zinger.png',
+  Chickskate: '/images/menu-chickskate.png',
+  'Golden Fries L': '/images/menu-goldenfries.png',
+  Coleslaw: '/images/menu-coleslaw.png',
+  'Mac and Cheese': '/images/menu-maccheese.png',
+  Tteokbokki: '/images/menu-tteokbokki.png',
+  'Seafood Pajeon': '/images/menu-pajeon.png',
+  Japchae: '/images/menu-japchae.png',
+  'Hot Oden': '/images/menu-oden.png',
+  'Chocolate Cupcake': '/images/menu-choccup.png',
+  'Soft Serve': '/images/menu-soft.png',
+  'Coca-Cola': '/images/menu-cola.png',
+  'Chocolate Float': '/images/menu-chocfloat.png',
+  'Soju Original': '/images/menu-soju.png',
+  Makgeolli: '/images/menu-makgeolli.png',
+  'Party Bucket Set': '/images/pro-combo-1.png',
+  'Spicy Sandwich Set': '/images/pro-combo-2.png',
+  'Chickskate Set': '/images/pro-chickskate.png',
+};
+
+export const getDefaultMenuImage = (name) =>
+  menuImageByName[name] || 'https://placehold.co/600x400/e4002b/ffffff?text=Serious+Fried+Chicken';
