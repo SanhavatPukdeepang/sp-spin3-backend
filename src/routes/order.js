@@ -6,6 +6,6 @@ export const router = Router();
 
 router.get('/', isAuth, getOrders);
 router.get('/:id', isAuth, getOrderById);
-router.post('/', isAuth, isEligible('customer'), createOrder);
+router.post('/', isAuth, isEligible('customer', 'cashier', 'owner'), createOrder);
 router.patch('/:orderId/item/:itemId', isAuth, isEligible('owner', 'cook', 'cashier'), updateOrderItemStatus);
 router.patch('/:id', isAuth, updateOrderStatus);

@@ -2,10 +2,9 @@ import { Order } from '../orders/Order.js';
 import {
   buildIngredientRequirements,
   calculateOrderTotal,
-  deductIngredientRequirements,
   validateIngredientRequirements,
 } from '../orders/orderController.js';
-import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
+import { broadcastTableOrderUpdate } from '../../realtime/tableOrderSocket.js';
 
 const isStaffPaymentUser = (user) => ['owner', 'cashier'].includes(user?.role);
 const isOrderOwner = (order, user) => String(order.customer?.userId || '') === String(user?.id || '');
@@ -17,7 +16,10 @@ export const processPayment = async (req, res) => {
 
     if (!orderId) return res.status(400).json({ message: 'Missing orderId' });
     if (!paymentMethod) return res.status(400).json({ message: 'Missing paymentMethod' });
-    if (amount == null || typeof amount !== 'number' || amount <= 0) return res.status(400).json({ message: 'Invalid amount' });
+    
+    // When slip is uploaded, amount might come as string from FormData
+    const numericAmount = Number(amount);
+    if (numericAmount == null || isNaN(numericAmount) || numericAmount <= 0) return res.status(400).json({ message: 'Invalid amount' });
 
     const order = await Order.findById(orderId);
     if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -30,7 +32,7 @@ export const processPayment = async (req, res) => {
     }
 
     const expectedAmount = calculateOrderTotal(order);
-    if (Math.abs(amount - expectedAmount) > 0.01) {
+    if (Math.abs(numericAmount - expectedAmount) > 0.01) {
       return res.status(400).json({
         message: 'Payment amount does not match order total',
         expectedAmount,
@@ -43,6 +45,7 @@ export const processPayment = async (req, res) => {
       const shouldClearOrder = order.status === 'pending' && !order.payment?.paidAt;
       if (shouldClearOrder) {
         await Order.findByIdAndDelete(order._id);
+        await broadcastTableOrderUpdate();
       }
 
       return res.status(409).json({
@@ -54,30 +57,35 @@ export const processPayment = async (req, res) => {
       });
     }
 
-    // Simulate payment gateway integration (replace with real gateway call)
+    // Simulate payment gateway integration or handle manual slip
     const paymentResult = { success: true, transactionId: `txn_${Date.now()}` };
 
     if (!paymentResult.success) {
       return res.status(402).json({ message: 'Payment failed' });
     }
 
-    order.status = 'preparing';
+    order.status = 'pending';
     order.payment = {
       method: paymentMethod,
-      amount,
+      amount: numericAmount,
       transactionId: paymentResult.transactionId,
       paidAt: new Date()
     };
-    await deductIngredientRequirements(requirements);
+
+    if (req.file) {
+      order.evidenceImage = req.file.path;
+    }
+
     await order.save();
-    await broadcastIngredientSnapshot();
+    await broadcastTableOrderUpdate();
 
     res.json({
       success: true,
       message: 'Payment processed successfully',
       orderId: order._id,
       status: order.status,
-      transactionId: paymentResult.transactionId
+      transactionId: paymentResult.transactionId,
+      evidenceImage: order.evidenceImage
     });
   } catch (err) {
     console.error('processPayment error', err);

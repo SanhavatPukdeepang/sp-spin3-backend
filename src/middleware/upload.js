@@ -17,11 +17,11 @@ const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
-const uploadToCloudinary = (file) =>
+const uploadToCloudinary = (file, folder = 'sfc_menu') =>
   new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
-        folder: 'sfc_menu',
+        folder,
         resource_type: 'image',
         transformation: [{ width: 1000, height: 1000, crop: 'limit' }],
       },
@@ -38,7 +38,7 @@ const uploadToCloudinary = (file) =>
   });
 
 export const upload = {
-  single: (fieldName) => [
+  single: (fieldName, folder = 'sfc_menu') => [
     multer({ storage, fileFilter }).single(fieldName),
     async (req, res, next) => {
       if (!req.file) {
@@ -47,7 +47,7 @@ export const upload = {
       }
 
       try {
-        const result = await uploadToCloudinary(req.file);
+        const result = await uploadToCloudinary(req.file, folder);
         req.file.path = result.secure_url;
         req.file.filename = result.public_id;
         next();

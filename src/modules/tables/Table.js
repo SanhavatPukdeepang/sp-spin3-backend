@@ -6,6 +6,9 @@ const tableSchema = new mongoose.Schema(
     number: { type: Number },
     area: { type: String, default: "Main Floor" },
     seats: { type: Number, default: 4 },
+    x: { type: Number, default: 50 },
+    y: { type: Number, default: 50 },
+    onlineReservable: { type: Boolean, default: true },
     seatedAt: { type: Date, default: null },
     status: {
       type: String,

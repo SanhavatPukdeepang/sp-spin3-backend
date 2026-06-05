@@ -1,9 +1,12 @@
 import { Order } from './Order.js';
+import { Counter } from './Counter.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
 import { Menu } from '../menus/Menu.js';
 import { User } from '../users/User.js';
 import cloudinary from '../../configs/cloudinary.js';
 import { processExpiredIngredientLots, consumeFromLots, syncIngredientState } from '../ingredients/inventoryLifecycle.js';
+import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
+import { broadcastTableOrderUpdate } from '../../realtime/tableOrderSocket.js';
 
 const normalizeOrderItemQuantity = (quantity) => {
   const numericQuantity = Number(quantity);
@@ -99,9 +102,25 @@ export const deductIngredientRequirements = async (requirements) => {
   }
 };
 
+const deductOrderInventoryIfNeeded = async (order) => {
+  if (!order || order.inventoryDeductedAt) return;
+
+  const requirements = await buildIngredientRequirements(order.orderList);
+  const stockError = validateIngredientRequirements(requirements);
+  if (stockError) {
+    const error = new Error(`Cannot send order to kitchen because ${stockError}.`);
+    error.statusCode = 409;
+    throw error;
+  }
+
+  await deductIngredientRequirements(requirements);
+  order.inventoryDeductedAt = new Date();
+  await broadcastIngredientSnapshot();
+};
+
 const ITEM_DONE_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelled']);
 const ITEM_ACTIVE_STATUSES = new Set(['Cook', 'preparing']);
-const ORDER_TERMINAL_STATUSES = new Set(['completed', 'delivered', 'cancelled']);
+const ORDER_TERMINAL_STATUSES = new Set(['completed', 'delivered', 'received', 'cancelled']);
 const ITEM_CANCELLED_STATUSES = new Set(['cancel', 'cancelled']);
 
 export const calculateOrderTotal = (order) => {
@@ -178,7 +197,18 @@ export const getOrderById = async (req, res) => {
 export const createOrder = async (req, res) => {
   try {
     await processExpiredIngredientLots({ broadcast: false });
-    const user = await User.findById(req.user.id).select('phone');
+    
+    // Generate sequential orderId
+    const counter = await Counter.findOneAndUpdate(
+      { id: 'orderId' },
+      { $inc: { seq: 1 } },
+      { returnDocument: 'after', upsert: true }
+    );
+    const orderIdStr = `SFC-${String(counter.seq).padStart(4, '0')}`;
+
+    const user = await User.findById(req.user.id).select('phone role');
+    const isCashier = user?.role === 'cashier' || req.user.role === 'cashier';
+
     const safeOrderBody = { ...req.body };
     delete safeOrderBody.payment;
     delete safeOrderBody.status;
@@ -198,18 +228,26 @@ export const createOrder = async (req, res) => {
       return res.status(400).json({ message: stockError });
     }
 
+    // Default customer logic for cashiers
+    let customerData = req.body.customer || {};
+    if (isCashier && !customerData.name) {
+      customerData.name = 'Walk-in Customer';
+    }
+
     const order = new Order({
       ...safeOrderBody,
+      orderId: orderIdStr,
       user_id: String(req.user.id),
       customer: {
-        ...(req.body.customer || {}),
-        contact: req.body.customer?.contact || req.body.customer?.phone || user?.phone || '',
-        userId: String(req.user.id),
+        ...customerData,
+        contact: customerData.contact || customerData.phone || user?.phone || '',
+        userId: customerData.userId || String(req.user.id),
       },
       orderList,
       status: 'pending',
     });
     const newOrder = await order.save();
+    await broadcastTableOrderUpdate();
     res.status(201).json(newOrder);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -233,7 +271,9 @@ export const updateOrderItemStatus = async (req, res) => {
     );
     if (!order) return res.status(404).json({ message: 'Order or item not found' });
 
-    res.json(await reconcileOrderStatus(order));
+    const reconciled = await reconcileOrderStatus(order);
+    await broadcastTableOrderUpdate();
+    res.json(reconciled);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -241,7 +281,7 @@ export const updateOrderItemStatus = async (req, res) => {
 
 export const updateOrderStatus = async (req, res) => {
   try {
-    const allowedStatuses = ['pending', 'preparing', 'completed', 'delivery', 'finished', 'delivered', 'cancelled'];
+  const allowedStatuses = ['pending', 'reserved', 'checked-in', 'preparing', 'completed', 'delivery', 'finished', 'delivered', 'received', 'cancelled'];
     const updates = {};
 
     const order = await Order.findById(req.params.id);
@@ -261,6 +301,9 @@ export const updateOrderStatus = async (req, res) => {
       if (!allowedStatuses.includes(req.body.status)) {
         return res.status(400).json({ message: 'Invalid order status' });
       }
+      if (req.body.status === 'preparing') {
+        await deductOrderInventoryIfNeeded(order);
+      }
       updates.status = req.body.status;
       if (req.body.status === 'delivered') updates.deliveredAt = new Date();
     }
@@ -268,10 +311,14 @@ export const updateOrderStatus = async (req, res) => {
     if (req.body.evidenceImage !== undefined) {
       updates.evidenceImage = await uploadDeliveryEvidence(req.body.evidenceImage, order._id);
     }
+    if (req.body.tableId !== undefined) updates.tableId = req.body.tableId;
+    if (req.body.reservationPax !== undefined) updates.reservationPax = Number(req.body.reservationPax) || undefined;
 
-    const updatedOrder = await Order.findByIdAndUpdate(req.params.id, updates, { new: true });
+    Object.assign(order, updates);
+    const updatedOrder = await order.save();
+    await broadcastTableOrderUpdate();
     res.json(updatedOrder);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(err.statusCode || 400).json({ message: err.message });
   }
 };
