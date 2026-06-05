@@ -80,6 +80,7 @@ export const processPayment = async (req, res) => {
 
     if (slipUrl) {
       order.evidenceImage = slipUrl;
+      order.receiptUrl = slipUrl;
     }
 
     await order.save();

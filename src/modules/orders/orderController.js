@@ -322,3 +322,36 @@ export const updateOrderStatus = async (req, res) => {
     res.status(err.statusCode || 400).json({ message: err.message });
   }
 };
+
+export const uploadOrderReceipt = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findById(id);
+
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    
+    // Check ownership
+    if (req.user.role === 'customer' && String(order.user_id) !== String(req.user.id)) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({ message: 'No receipt file uploaded' });
+    }
+
+    order.receiptUrl = req.file.path;
+    // Also update slipUrl for consistency if needed
+    if (!order.payment) order.payment = {};
+    order.payment.slipUrl = req.file.path;
+    
+    await order.save();
+    await broadcastTableOrderUpdate();
+
+    res.json({
+      message: 'Receipt uploaded successfully',
+      receiptUrl: order.receiptUrl
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};

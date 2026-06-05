@@ -28,6 +28,7 @@ const orderSchema = new mongoose.Schema({
     slipUrl: { type: String },
     paidAt: { type: Date }
   },
+  receiptUrl: { type: String },
   evidenceImage: { type: String },
   deliveredAt: { type: Date },
   inventoryDeductedAt: { type: Date },
