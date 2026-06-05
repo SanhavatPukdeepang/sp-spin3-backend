@@ -5,4 +5,4 @@ import { upload } from '../middleware/upload.js';
 
 export const router = Router();
 
-router.post('/:orderId/process', isAuth, isEligible('customer', 'cashier', 'owner'), upload.single('slip', 'slipt-picture'), processPayment);
+router.post('/:orderId/process', isAuth, isEligible('customer', 'cashier', 'owner'), upload.single('slip', 'payment_slips'), processPayment);

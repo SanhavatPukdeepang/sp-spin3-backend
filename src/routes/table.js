@@ -10,7 +10,7 @@ const toOwnerStatus = (status) => {
     FREE: 'Available',
     OCCUPIED: 'Eating',
     BILL: 'Payment',
-    RESERVED: 'Cooking',
+    RESERVED: 'Reserved',
   };
   return map[status] || 'Available';
 };
@@ -20,6 +20,7 @@ const toBackendStatus = (status) => {
     Available: 'FREE',
     Eating: 'OCCUPIED',
     Cooking: 'RESERVED',
+    Reserved: 'RESERVED',
     Payment: 'BILL',
   };
   return map[status] || status;

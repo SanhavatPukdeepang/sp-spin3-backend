@@ -3,8 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { Menu } from './src/modules/menus/Menu.js';
-import { connectDB } from './src/configs/mongodb.js';
+import { Menu } from '../src/modules/menus/Menu.js';
+import { connectDB } from '../src/configs/mongodb.js';
 
 dotenv.config();
 

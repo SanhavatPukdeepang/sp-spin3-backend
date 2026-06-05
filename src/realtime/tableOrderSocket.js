@@ -9,7 +9,7 @@ const toOwnerStatus = (status) => {
     FREE: 'Available',
     OCCUPIED: 'Eating',
     BILL: 'Payment',
-    RESERVED: 'Cooking',
+    RESERVED: 'Reserved',
   };
   return map[status] || 'Available';
 };
