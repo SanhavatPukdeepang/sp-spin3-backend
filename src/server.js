@@ -24,10 +24,24 @@ const allowedOrigins = [
   'https://sp-spin3-frontend.vercel.app',
 ]
 
+const isAllowedDevOrigin = (origin) => {
+  if (process.env.NODE_ENV !== 'development') return false
+
+  try {
+    const { hostname } = new URL(origin)
+    return hostname === 'localhost' || hostname === '127.0.0.1'
+  } catch {
+    return false
+  }
+}
+
 app.use(helmet())
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    if (!origin || allowedOrigins.includes(origin) || isAllowedDevOrigin(origin)) {
+      return callback(null, true)
+    }
+
     return callback(new Error(`Not allowed by CORS: ${origin}`))
   },
   credentials: true,

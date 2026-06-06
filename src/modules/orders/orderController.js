@@ -3,6 +3,7 @@ import { Counter } from './Counter.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
 import { Menu } from '../menus/Menu.js';
 import { User } from '../users/User.js';
+import { Delivery } from '../delivery/Delivery.js';
 import cloudinary from '../../configs/cloudinary.js';
 import { processExpiredIngredientLots, consumeFromLots, syncIngredientState } from '../ingredients/inventoryLifecycle.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
@@ -167,6 +168,37 @@ const reconcileOrderStatus = async (order) => {
   return order;
 };
 
+const toPublicRider = (rider) => {
+  if (!rider) return null;
+  return {
+    _id: rider._id,
+    name: [rider.name, rider.surname].filter(Boolean).join(' ').trim() || rider.username || 'Rider',
+    phone: rider.phone || '',
+  };
+};
+
+const attachDeliveryRider = async (order) => {
+  if (!order) return order;
+
+  const orderObject = typeof order.toObject === 'function' ? order.toObject() : { ...order };
+  if (orderObject.type !== 'delivery') return orderObject;
+
+  const delivery = await Delivery.findOne({ order: orderObject._id })
+    .populate('rider_id', 'name surname username phone')
+    .sort({ updatedAt: -1, createdAt: -1 });
+
+  const rider =
+    delivery?.rider_id ||
+    await User.findOne({ role: 'rider', active_status: { $ne: false } })
+      .select('name surname username phone')
+      .sort({ createdAt: 1 });
+
+  return {
+    ...orderObject,
+    rider: toPublicRider(rider),
+  };
+};
+
 export const getOrders = async (req, res) => {
   try {
     await processExpiredIngredientLots();
@@ -188,7 +220,8 @@ export const getOrderById = async (req, res) => {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (!canReadOrder(order, req.user)) return res.status(403).json({ message: 'Access denied' });
-    res.json(await reconcileOrderStatus(order));
+    const reconciledOrder = await reconcileOrderStatus(order);
+    res.json(await attachDeliveryRider(reconciledOrder));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
