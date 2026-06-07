@@ -34,4 +34,13 @@ ingredientLotSchema.pre("save", function () {
   }
 });
 
+ingredientLotSchema.index({
+  ingredient: 1,
+  type: 1,
+  remainingQuantity: 1,
+  expiryDate: 1,
+});
+ingredientLotSchema.index({ type: 1, expiryDate: 1, remainingQuantity: 1 });
+ingredientLotSchema.index({ ingredient: 1, createdAt: -1 });
+
 export const IngredientLot = mongoose.model("IngredientLot", ingredientLotSchema);
