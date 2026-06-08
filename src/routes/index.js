@@ -7,14 +7,16 @@ import { router as promotionRouter } from './promotion.js';
 import { router as ingredientRouter } from './ingredient.js';
 import { router as ownerRouter } from './owner.js';
 import { router as tableRouter } from './table.js';
+import { router as orderItemRouter } from './orderItem.js';
 
 export const router = Router();
 
 router.use('/auth', authRouter);
 router.use('/orders', orderRouter);
+router.use('/order-items', orderItemRouter);
 router.use('/payments', paymentRouter);
 router.use('/menus', menuRouter);
-router.use('/promotion', promotionRouter);
+router.use('/promotions', promotionRouter);
 router.use('/ingredients', ingredientRouter);
 router.use('/owner', ownerRouter);
 router.use('/tables', tableRouter);

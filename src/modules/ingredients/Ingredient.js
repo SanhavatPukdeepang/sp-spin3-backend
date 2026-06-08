@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const ingredienSchema = new mongoose.Schema(
+const ingredientSchema = new mongoose.Schema(
   {
     ingredient_index: { type: Number, required: true, default: 0 },
     name: { type: String, required: true, trim: true, unique: true },
@@ -15,4 +15,4 @@ const ingredienSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-export const Ingredient = mongoose.model("Ingredient", ingredienSchema);
+export const Ingredient = mongoose.model("Ingredient", ingredientSchema);

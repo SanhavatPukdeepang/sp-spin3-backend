@@ -13,19 +13,34 @@ This document contains foundational mandates, architecture patterns, and coding 
 ## Architecture Patterns
 
 ### Modular Structure
-The project follows a modular structure located in `src/modules`. Each module should encapsulate its own:
-- **Model:** Mongoose schema definition (e.g., `Menu.js`).
-- **Controller:** Logic for handling requests and interacting with models (e.g., `menuController.js`).
-- **Specialized Logic:** Any module-specific logic (e.g., `inventoryLifecycle.js`).
+The project follows a modular structure located in `src/modules`. Each module encapsulates its own:
+- **Model:** Mongoose schema definition (e.g., `src/modules/menus/Menu.js`).
+- **Controller:** Logic for handling requests and interacting with models (e.g., `src/modules/menus/menuController.js`).
+- **Specialized Logic:** Any module-specific logic (e.g., `src/modules/ingredients/inventoryLifecycle.js`).
+
+**Available Modules:**
+- `auth`: User authentication and JWT management.
+- `delivery`: Delivery tracking and rider management.
+- `ingredients`: Lot-based inventory management with expiry tracking.
+- `menus`: Menu items, categories, and ingredient linking.
+- `orderItems`: Individual items within an order (embedded and standalone).
+- `orders`: Order processing, status management, and inventory deduction.
+- `payments`: Payment processing and record keeping.
+- `promotions`: Discounts and promotional offers.
+- `tables`: Dining table management and order tracking.
+- `users`: User profiles and role-based access control.
+- `wastes`: Tracking wasted or expired ingredients.
 
 ### Routing
-Routes are centralized in `src/routes/index.js` which delegates to specific route files (e.g., `src/routes/menu.js`).
-- Use `/api` as the base prefix for all standard routes.
-- Legacy/Compatibility routes are under `/api/api`.
+Routes are centralized in `src/routes/index.js` which delegates to specific route files.
+- **Base API:** `/api` (e.g., `/api/menus`, `/api/orders`).
+- **Compatibility Layer:** `/api/api` (used by legacy dashboard integrations, defined in `src/routes/ownerCompat.js`).
 
 ### Real-time Communication
-- **WebSockets:** Used for broadcasting updates like ingredient stock snapshots and table order status. Initialized in `src/realtime/`.
-- **SSE:** Used for lightweight one-way notifications.
+- **WebSockets:** Used for broadcasting live updates.
+  - `initIngredientSocket`: Broadcasts inventory stock snapshots.
+  - `initTableOrderSocket`: Broadcasts updates for table-based orders.
+- **SSE:** Used for lightweight one-way notifications (e.g., menu updates).
 
 ## Coding Conventions
 
@@ -37,7 +52,7 @@ Routes are centralized in `src/routes/index.js` which delegates to specific rout
 ### Error Handling
 - Use `try...catch` blocks in controllers.
 - Return consistent JSON error responses: `{ "message": "error description" }`.
-- Use appropriate HTTP status codes (400 for client errors, 404 for not found, 500 for server errors).
+- Use appropriate HTTP status codes (400 for client errors, 401 for unauthorized, 403 for forbidden, 404 for not found, 409 for conflicts, 500 for server errors).
 
 ### Async/Await
 - Prefer `async/await` over callbacks or raw promises.

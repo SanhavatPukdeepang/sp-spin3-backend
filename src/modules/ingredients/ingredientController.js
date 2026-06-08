@@ -60,7 +60,7 @@ export async function getAllIngredients(req, res) {
     const ingredients = await Ingredient.find().sort({ ingredient_index: 1, name: 1 });
     res.json(await withExpiredQuantities(ingredients));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ message: err.message });
   }
 }
 
@@ -89,7 +89,7 @@ export async function getIngredientsByStatus(req, res) {
 
     res.json(grouped);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ message: err.message });
   }
 }
 
@@ -97,11 +97,11 @@ export async function getIngredient(req, res) {
   try {
     const ingredient = await Ingredient.findById(req.params.id);
     if (!ingredient) {
-      return res.status(404).json({ error: 'Ingredient not found' });
+      return res.status(404).json({ message: 'Ingredient not found' });
     }
     res.json(ingredient);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ message: err.message });
   }
 }
 
@@ -122,7 +122,7 @@ export async function getIngredientLots(req, res) {
     ];
     res.json(lots);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ message: err.message });
   }
 }
 
@@ -131,11 +131,11 @@ export async function addIngredientStock(req, res) {
     const { quantity, expiryDate, reason } = req.body;
     const normalizedQuantity = roundQuantity(quantity);
     if (typeof quantity !== 'number' || normalizedQuantity <= 0) {
-      return res.status(400).json({ error: 'Quantity must be a positive number' });
+      return res.status(400).json({ message: 'Quantity must be a positive number' });
     }
     const lotExpiryDate = parseRequiredExpiryDate(expiryDate);
     if (!lotExpiryDate) {
-      return res.status(400).json({ error: 'Expiry date is required for stock lots' });
+      return res.status(400).json({ message: 'Expiry date is required for stock lots' });
     }
 
     const updatedIngredient = await withInventoryTransaction(async (session) => {
@@ -163,7 +163,7 @@ export async function addIngredientStock(req, res) {
     await broadcastIngredientSnapshot();
     res.json(updatedIngredient);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 }
 
@@ -191,7 +191,7 @@ export async function expireIngredientLot(req, res) {
 
     res.json({ message: 'Lot expired successfully' });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 }
 
@@ -229,7 +229,7 @@ export async function updateIngredientLot(req, res) {
     
     res.json(lot);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 }
 
@@ -252,7 +252,7 @@ export async function deleteIngredientLot(req, res) {
     
     res.json({ message: 'Lot deleted successfully' });
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 }
 
@@ -261,7 +261,7 @@ export async function updateIngredientStock(req, res) {
     const { quantity, expiryDate, reason } = req.body;
     const normalizedQuantity = roundQuantity(quantity);
     if (typeof quantity !== 'number') {
-      return res.status(400).json({ error: 'Quantity must be a number' });
+      return res.status(400).json({ message: 'Quantity must be a number' });
     }
 
     const updatedIngredient = await withInventoryTransaction(async (session) => {
@@ -305,7 +305,7 @@ export async function updateIngredientStock(req, res) {
     await broadcastIngredientSnapshot();
     res.json(updatedIngredient);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 }
 
@@ -327,7 +327,7 @@ export async function updateIngredient(req, res) {
     });
 
     if (updates.name !== undefined && !String(updates.name).trim()) {
-      return res.status(400).json({ error: 'Name is required' });
+      return res.status(400).json({ message: 'Name is required' });
     }
     if (updates.name !== undefined) {
       const duplicateIngredient = await Ingredient.findOne({
@@ -335,13 +335,13 @@ export async function updateIngredient(req, res) {
         name: new RegExp(`^${String(updates.name).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
       });
       if (duplicateIngredient) {
-        return res.status(409).json({ error: 'Ingredient name already exists' });
+        return res.status(409).json({ message: 'Ingredient name already exists' });
       }
       updates.name = String(updates.name).trim();
     }
 
     if (updates.unit !== undefined && !String(updates.unit).trim()) {
-      return res.status(400).json({ error: 'Unit is required' });
+      return res.status(400).json({ message: 'Unit is required' });
     }
 
     ['price_per_unit', 'low_stock_threshold'].forEach((field) => {
@@ -430,7 +430,7 @@ export async function updateIngredient(req, res) {
     await broadcastIngredientSnapshot();
     res.json(finalizedIngredient);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 }
 
@@ -438,16 +438,16 @@ export async function decreaseIngredientStock(req, res) {
   try {
     const { amount, reason } = req.body;
     if (typeof amount !== 'number' || amount <= 0) {
-      return res.status(400).json({ error: 'Amount must be positive' });
+      return res.status(400).json({ message: 'Amount must be positive' });
     }
 
     const ingredient = await Ingredient.findById(req.params.id);
     if (!ingredient) {
-      return res.status(404).json({ error: 'Ingredient not found' });
+      return res.status(404).json({ message: 'Ingredient not found' });
     }
 
     if (ingredient.quantity < amount) {
-      return res.status(400).json({ error: 'Insufficient stock' });
+      return res.status(400).json({ message: 'Insufficient stock' });
     }
 
     const updatedIngredient = await withInventoryTransaction(async (session) => {
@@ -458,7 +458,7 @@ export async function decreaseIngredientStock(req, res) {
     await broadcastIngredientSnapshot();
     res.json(updatedIngredient);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 }
 
@@ -474,17 +474,17 @@ export async function createIngredient(req, res) {
     if (!trimmedName || !unit || price_per_unit === undefined) {
       return res
         .status(400)
-        .json({ error: 'Missing required fields' });
+        .json({ message: 'Missing required fields' });
     }
     if (initialQuantity > 0 && !initialLotExpiryDate) {
-      return res.status(400).json({ error: 'Expiry date is required for initial stock' });
+      return res.status(400).json({ message: 'Expiry date is required for initial stock' });
     }
 
     const duplicateIngredient = await Ingredient.findOne({
       name: new RegExp(`^${trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
     });
     if (duplicateIngredient) {
-      return res.status(409).json({ error: 'Ingredient name already exists' });
+      return res.status(409).json({ message: 'Ingredient name already exists' });
     }
 
     const lastIngredient = await Ingredient.findOne()
@@ -524,6 +524,6 @@ export async function createIngredient(req, res) {
     await broadcastIngredientSnapshot();
     res.status(201).json(finalizedIngredient);
   } catch (err) {
-    res.status(err.statusCode || 500).json({ error: err.message });
+    res.status(err.statusCode || 500).json({ message: err.message });
   }
 }
