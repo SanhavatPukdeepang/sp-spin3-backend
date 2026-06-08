@@ -46,7 +46,7 @@ const orderSchema = new mongoose.Schema({
   inventoryDeductedAt: { type: Date },
   status: { 
     type: String, 
-    enum: ['pending', 'reserved', 'checked-in', 'preparing', 'completed', 'delivery', 'finished', 'delivered', 'received', 'cancelled'], 
+    enum: ['pending', 'reserved', 'checked-in', 'preparing', 'completed', 'delivery', 'shipping', 'finished', 'delivered', 'received', 'cancelled'], 
     default: 'pending' 
   },
   createdAt: { type: Date, default: Date.now }

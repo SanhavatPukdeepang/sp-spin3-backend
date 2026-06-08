@@ -123,7 +123,7 @@ const deductOrderInventoryIfNeeded = async (order, { session } = {}) => {
 
 const ITEM_DONE_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelled']);
 const ITEM_ACTIVE_STATUSES = new Set(['Cook', 'preparing']);
-const ORDER_TERMINAL_STATUSES = new Set(['completed', 'delivered', 'received', 'cancelled']);
+const ORDER_TERMINAL_STATUSES = new Set(['completed', 'shipping', 'delivered', 'received', 'cancelled']);
 const ITEM_CANCELLED_STATUSES = new Set(['cancel', 'cancelled']);
 
 export const calculateOrderTotal = (order) => {
@@ -333,7 +333,7 @@ export const updateOrderItemStatus = async (req, res) => {
 export const updateOrderStatus = async (req, res) => {
   let session;
   try {
-  const allowedStatuses = ['pending', 'reserved', 'checked-in', 'preparing', 'completed', 'delivery', 'finished', 'delivered', 'received', 'cancelled'];
+  const allowedStatuses = ['pending', 'reserved', 'checked-in', 'preparing', 'completed', 'delivery', 'shipping', 'finished', 'delivered', 'received', 'cancelled'];
     const updates = {};
 
     const order = await Order.findById(req.params.id);
