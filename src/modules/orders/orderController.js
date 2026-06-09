@@ -639,6 +639,8 @@ export const updateOrderStatus = async (req, res) => {
       if (req.body.status === 'delivered') updates.deliveredAt = new Date();
     }
 
+    if (req.body.note_global !== undefined) updates.note_global = req.body.note_global;
+    if (req.body.rider !== undefined) updates.rider = req.body.rider;
     if (req.body.evidenceImage !== undefined) {
       updates.evidenceImage = await uploadDeliveryEvidence(req.body.evidenceImage, order._id);
     }

@@ -32,6 +32,7 @@ const orderSchema = new mongoose.Schema({
   tableId: { type: String },
   reservationPax: { type: Number },
   note_global: { type: String },
+  rider: { userId: String, name: String, phone: String, vehicle: String, plate: String },
   orderList: [embeddedOrderItemSchema],
   payment: {
     method: { type: String },
