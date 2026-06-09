@@ -23,7 +23,7 @@ const getTodayDateValue = () => new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 }).format(new Date());
 
-const SCHEDULED_COOK_LEAD_MINUTES = 10;
+const SCHEDULED_COOK_LEAD_MINUTES = 30;
 
 const getOrderMode = (orderBody) => String(orderBody?.customer?.note || '').split('|')[0];
 
