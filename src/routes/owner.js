@@ -33,20 +33,28 @@ const ownerRoleToUserRole = (role) => {
 };
 
 const buildDateFilter = (period) => {
-  const now = new Date();
-  const start = new Date(now);
+  const BKK_OFFSET = 7 * 60 * 60 * 1000;
+  const nowUTC = Date.now();
+  const nowBKK = new Date(nowUTC + BKK_OFFSET);
+
+  const todayBKK = new Date(nowBKK);
+  todayBKK.setUTCHours(0, 0, 0, 0);
+  const todayStartUTC = new Date(todayBKK.getTime() - BKK_OFFSET);
 
   if (period === 'today') {
-    start.setHours(0, 0, 0, 0);
-  } else if (period === 'month') {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-  } else {
-    start.setDate(start.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
+    return { $gte: todayStartUTC, $lte: new Date(nowUTC) };
   }
 
-  return { $gte: start, $lte: now };
+  if (period === 'month') {
+    const monthStartBKK = new Date(nowBKK);
+    monthStartBKK.setUTCDate(1);
+    monthStartBKK.setUTCHours(0, 0, 0, 0);
+    const monthStartUTC = new Date(monthStartBKK.getTime() - BKK_OFFSET);
+    return { $gte: monthStartUTC, $lte: new Date(nowUTC) };
+  }
+
+  const weekStartUTC = new Date(todayStartUTC.getTime() - 6 * 24 * 60 * 60 * 1000);
+  return { $gte: weekStartUTC, $lte: new Date(nowUTC) };
 };
 
 const getOrderTotal = (order) => {
