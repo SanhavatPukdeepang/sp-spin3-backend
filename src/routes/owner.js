@@ -135,17 +135,31 @@ const toStaffMember = (user) => ({
   area: user.role === 'cook' ? 'Kitchen' : user.role === 'rider' ? 'Delivery' : 'Front of house',
   lastLogin: user.updatedAt || user.createdAt,
   isLocked: user.active_status === false,
+  on_duty: user.on_duty,
   isPending: false,
 });
 
 router.get('/summary', ownerOnly, async (req, res) => {
   try {
-    const createdAt = buildDateFilter(req.query.period);
-    const orders = await Order.find({ createdAt });
+    const { period, startDate, endDate } = req.query;
+    let dateFilter = {};
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter = { $gte: start, $lte: end };
+    } else {
+      dateFilter = buildDateFilter(period);
+    }
+
+    const orders = await Order.find({ createdAt: dateFilter });
     const revenue = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
     const activeTables = await Order.countDocuments({
       status: { $in: ['pending', 'preparing'] },
       type: 'Onsite',
+      createdAt: dateFilter,
     });
 
     res.json({

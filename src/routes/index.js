@@ -7,6 +7,7 @@ import { router as promotionRouter } from './promotion.js';
 import { router as ingredientRouter } from './ingredient.js';
 import { router as ownerRouter } from './owner.js';
 import { router as tableRouter } from './table.js';
+import { router as settingsRouter } from './settings.js';
 
 export const router = Router();
 
@@ -18,3 +19,4 @@ router.use('/promotion', promotionRouter);
 router.use('/ingredients', ingredientRouter);
 router.use('/owner', ownerRouter);
 router.use('/tables', tableRouter);
+router.use('/config', settingsRouter);

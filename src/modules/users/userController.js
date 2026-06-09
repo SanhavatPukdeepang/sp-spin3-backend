@@ -13,6 +13,7 @@ const serializeUser = (user, includeTimestamps = false) => {
     role: user.role,
     addresses: Array.isArray(user.addresses) ? user.addresses : [],
     active_status: user.active_status,
+    on_duty: user.on_duty,
   };
 
   if (includeTimestamps) {

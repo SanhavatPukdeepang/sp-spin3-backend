@@ -1,8 +1,8 @@
 import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import { connectDB } from './src/configs/mongodb.js';
-import { Ingredient } from './src/modules/ingredients/Ingredient.js';
-import { Menu } from './src/modules/menus/Menu.js';
+import { connectDB } from '../src/configs/mongodb.js';
+import { Ingredient } from '../src/modules/ingredients/Ingredient.js';
+import { Menu } from '../src/modules/menus/Menu.js';
 
 dotenv.config();
 

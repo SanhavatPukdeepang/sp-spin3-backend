@@ -5,6 +5,7 @@ import { Ingredient } from '../ingredients/Ingredient.js';
 import { Menu } from '../menus/Menu.js';
 import { User } from '../users/User.js';
 import { Delivery } from '../delivery/Delivery.js';
+import { Settings } from '../settings/Settings.js';
 import cloudinary from '../../configs/cloudinary.js';
 import { processExpiredIngredientLots, consumeFromLots, syncIngredientState } from '../ingredients/inventoryLifecycle.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
@@ -275,6 +276,27 @@ export const createOrder = async (req, res) => {
     let customerData = req.body.customer || {};
     if (isCashier && !customerData.name) {
       customerData.name = 'Walk-in Customer';
+    }
+
+    // Reservation minimum order validation
+    if (req.body.reservationPax) {
+      const configDoc = await Settings.findOne({ key: 'reservationThresholds' });
+      const config = configDoc?.value || { oneTwoMin: 600, threeSixMin: 1200, sevenTenMin: 2500 };
+      const pax = Number(req.body.reservationPax);
+
+      const subTotal = req.body.subTotal || orderList.reduce((sum, item) => {
+        return sum + Number(item.price || item.price_at_purchase || 0) * item.quantity;
+      }, 0);
+
+      if (pax <= 2 && subTotal < config.oneTwoMin) {
+        return res.status(400).json({ message: 'Order total does not meet minimum for 1-2 people' });
+      }
+      if (pax <= 6 && subTotal < config.threeSixMin) {
+        return res.status(400).json({ message: 'Order total does not meet minimum for 3-6 people' });
+      }
+      if (pax <= 10 && subTotal < config.sevenTenMin) {
+        return res.status(400).json({ message: 'Order total does not meet minimum for 7-10 people' });
+      }
     }
 
     const order = new Order({
