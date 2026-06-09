@@ -6,6 +6,7 @@ import { broadcastSSE } from '../utils/sse.js';
 
 
 let ingredientSocketServer;
+const STOCK_EPSILON = 0.000001;
 
 const withStockStatus = (menu) => {
   const item = menu.toObject ? menu.toObject() : menu;
@@ -17,7 +18,7 @@ const withStockStatus = (menu) => {
       return (
         !ingredient ||
         ingredient.active_status === false ||
-        Number(ingredient.quantity || 0) < Number(entry.quantity || 0)
+        Number(ingredient.quantity || 0) + STOCK_EPSILON < Number(entry.quantity || 0)
       );
     })
     .map((entry) => ({

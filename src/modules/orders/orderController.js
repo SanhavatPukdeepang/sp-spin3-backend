@@ -151,9 +151,9 @@ export const validateIngredientRequirements = (requirements) => {
   return '';
 };
 
-export const deductIngredientRequirements = async (requirements, { session, order } = {}) => {
+export const deductIngredientRequirements = async (requirements, { session, order, reason = 'Order placed' } = {}) => {
   for (const [ingredientId, { requiredQuantity }] of requirements.entries()) {
-    await consumeFromLots(ingredientId, requiredQuantity, 'OUT', 'Order placed', { session, order });
+    await consumeFromLots(ingredientId, requiredQuantity, 'OUT', reason, { session, order });
     await syncIngredientState(ingredientId, { session });
   }
 };
@@ -257,6 +257,7 @@ const ITEM_DONE_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelle
 const ITEM_ACTIVE_STATUSES = new Set(['Cook', 'preparing']);
 const ORDER_TERMINAL_STATUSES = new Set(['completed', 'shipping', 'delivered', 'received', 'cancelled']);
 const ITEM_CANCELLED_STATUSES = new Set(['cancel', 'cancelled']);
+const REDO_SOURCE_ITEM_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelled']);
 
 export const calculateOrderTotal = (order) => {
   const items = Array.isArray(order?.orderList) ? order.orderList : [];
@@ -292,6 +293,25 @@ const getNextOrderStatusFromItems = (order) => {
   }
   if (itemStatuses.some((status) => ITEM_ACTIVE_STATUSES.has(status))) return 'preparing';
   return order.status;
+};
+
+const isRedoItemTransition = (fromStatus, toStatus) =>
+  toStatus === 'InKitchen' && REDO_SOURCE_ITEM_STATUSES.has(fromStatus);
+
+const deductRedoItemInventory = async (order, item, { session } = {}) => {
+  const requirements = await buildIngredientRequirements([item], { session });
+  const stockError = validateIngredientRequirements(requirements);
+  if (stockError) {
+    const error = new Error(`Cannot redo item because ${stockError}.`);
+    error.statusCode = 409;
+    throw error;
+  }
+
+  await deductIngredientRequirements(requirements, {
+    session,
+    order: order._id,
+    reason: 'Order item redo',
+  });
 };
 
 const reconcileOrderStatus = async (order) => {
@@ -452,6 +472,7 @@ export const createOrder = async (req, res) => {
 };
 
 export const updateOrderItemStatus = async (req, res) => {
+  let session;
   try {
     const { orderId, itemId } = req.params;
     const { status } = req.body;
@@ -467,22 +488,54 @@ export const updateOrderItemStatus = async (req, res) => {
       assertScheduledCookWindow(existingOrder);
     }
 
-    const order = await Order.findOneAndUpdate(
-      { _id: orderId, 'orderList._id': itemId },
-      { $set: { 'orderList.$.status': status } },
-      { new: true }
-    );
+    const existingItem = existingOrder.orderList.id(itemId);
+    const shouldDeductRedoInventory = isRedoItemTransition(existingItem?.status, status);
+    let shouldBroadcastIngredientSnapshot = false;
+    let reconciled;
 
-    const reconciled = await reconcileOrderStatus(order);
-    const restoredInventory =
-      reconciled.status === 'cancelled' &&
-      await restoreOrderInventoryIfPossible(reconciled);
-    if (restoredInventory) await reconciled.save();
-    if (restoredInventory) await broadcastIngredientSnapshot();
+    if (shouldDeductRedoInventory) {
+      session = await mongoose.startSession();
+      await session.withTransaction(async () => {
+        const lockedOrder = await Order.findOne({ _id: orderId, 'orderList._id': itemId }).session(session);
+        if (!lockedOrder) {
+          const error = new Error('Order or item not found');
+          error.statusCode = 404;
+          throw error;
+        }
+
+        const lockedItem = lockedOrder.orderList.id(itemId);
+        if (isRedoItemTransition(lockedItem?.status, status)) {
+          await deductRedoItemInventory(lockedOrder, lockedItem, { session });
+          shouldBroadcastIngredientSnapshot = true;
+        }
+
+        lockedItem.status = status;
+        const nextStatus = getNextOrderStatusFromItems(lockedOrder);
+        if (nextStatus) lockedOrder.status = nextStatus;
+        reconciled = await lockedOrder.save({ session });
+      });
+    } else {
+      const order = await Order.findOneAndUpdate(
+        { _id: orderId, 'orderList._id': itemId },
+        { $set: { 'orderList.$.status': status } },
+        { new: true }
+      );
+
+      reconciled = await reconcileOrderStatus(order);
+      const restoredInventory =
+        reconciled.status === 'cancelled' &&
+        await restoreOrderInventoryIfPossible(reconciled);
+      if (restoredInventory) await reconciled.save();
+      shouldBroadcastIngredientSnapshot = restoredInventory;
+    }
+
+    if (shouldBroadcastIngredientSnapshot) await broadcastIngredientSnapshot();
     await broadcastTableOrderUpdate();
     res.json(reconciled);
   } catch (err) {
     res.status(err.statusCode || 400).json({ message: err.message });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 

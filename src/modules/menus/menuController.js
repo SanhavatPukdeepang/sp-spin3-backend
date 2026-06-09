@@ -7,6 +7,7 @@ import { broadcastSSE } from '../../utils/sse.js';
 import { getDefaultMenuImage } from './menuImages.js';
 
 const countBasedUnits = new Set(['piece', 'pieces', 'jar', 'jars', 'bottle', 'bottles']);
+const STOCK_EPSILON = 0.000001;
 
 const normalizeMenuIngredientQuantity = (quantity, unit = '') => {
   const numericQuantity = Number(quantity);
@@ -61,7 +62,7 @@ const withStockStatus = (menu) => {
       return (
         !ingredient ||
         ingredient.active_status === false ||
-        Number(ingredient.quantity || 0) < Number(entry.quantity || 0)
+        Number(ingredient.quantity || 0) + STOCK_EPSILON < Number(entry.quantity || 0)
       );
     })
     .map((entry) => ({
