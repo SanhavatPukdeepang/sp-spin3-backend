@@ -54,6 +54,7 @@ const sanitizeMenuIngredients = async (ingredients = []) => {
 const withStockStatus = (menu) => {
   const item = menu.toObject ? menu.toObject() : menu;
   const linkedIngredients = Array.isArray(item.ingredients) ? item.ingredients : [];
+  const hasRecipe = linkedIngredients.length > 0;
   const missingIngredients = linkedIngredients
     .filter((entry) => {
       const ingredient = entry.ingredient;
@@ -73,10 +74,14 @@ const withStockStatus = (menu) => {
   return {
     ...item,
     image: item.image || getDefaultMenuImage(item.name),
-    soldOut: item.available === false || missingIngredients.length > 0,
+    hasRecipe,
+    hiddenFromCustomerMenu: !hasRecipe,
+    soldOut: item.available === false || !hasRecipe || missingIngredients.length > 0,
     soldOutReason:
       item.available === false
         ? 'Menu unavailable'
+        : !hasRecipe
+          ? 'Recipe ingredients are not assigned'
         : missingIngredients.length > 0
           ? 'Ingredient stock is not enough'
           : '',
@@ -100,7 +105,8 @@ export const getMenus = async (req, res) => {
     const menus = await Menu.find(filter)
       .populate('ingredients.ingredient')
       .sort({ category: 1, name: 1 });
-    res.json(menus.map(withStockStatus));
+    const processedMenus = menus.map(withStockStatus);
+    res.json(all === 'true' ? processedMenus : processedMenus.filter((menu) => menu.hasRecipe));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

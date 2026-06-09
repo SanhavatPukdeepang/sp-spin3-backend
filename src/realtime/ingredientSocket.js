@@ -10,6 +10,7 @@ let ingredientSocketServer;
 const withStockStatus = (menu) => {
   const item = menu.toObject ? menu.toObject() : menu;
   const linkedIngredients = Array.isArray(item.ingredients) ? item.ingredients : [];
+  const hasRecipe = linkedIngredients.length > 0;
   const missingIngredients = linkedIngredients
     .filter((entry) => {
       const ingredient = entry.ingredient;
@@ -28,10 +29,14 @@ const withStockStatus = (menu) => {
 
   return {
     ...item,
-    soldOut: item.available === false || missingIngredients.length > 0,
+    hasRecipe,
+    hiddenFromCustomerMenu: !hasRecipe,
+    soldOut: item.available === false || !hasRecipe || missingIngredients.length > 0,
     soldOutReason:
       item.available === false
         ? 'Menu unavailable'
+        : !hasRecipe
+          ? 'Recipe ingredients are not assigned'
         : missingIngredients.length > 0
           ? 'Ingredient stock is not enough'
           : '',
@@ -133,7 +138,7 @@ export async function broadcastIngredientSnapshot() {
     lastMenuStatusMap = currentStatusMap;
     broadcastSSE({
       type: 'menu:update',
-      menus: processedMenus,
+      menus: processedMenus.filter((menu) => menu.hasRecipe),
     });
   }
 
