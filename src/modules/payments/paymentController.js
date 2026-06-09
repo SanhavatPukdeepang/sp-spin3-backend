@@ -11,6 +11,45 @@ import { broadcastTableOrderUpdate } from '../../realtime/tableOrderSocket.js';
 const isStaffPaymentUser = (user) => ['owner', 'cashier'].includes(user?.role);
 const isOrderOwner = (order, user) => String(order.customer?.userId || '') === String(user?.id || '');
 
+const formatMoney = (value) =>
+  Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+const appendStaffNoteLine = (order, line) => {
+  const note = String(order.note_global || '').trim();
+  order.note_global = note ? `${note}\n${line}` : line;
+};
+
+const addRefundDifferenceNote = (order, paidAmount, currentTotal, reason = '') => {
+  const refundAmount = Math.round(Math.max(0, Number(paidAmount || 0) - Number(currentTotal || 0)) * 100) / 100;
+  if (refundAmount <= 0) return;
+
+  appendStaffNoteLine(
+    order,
+    [
+      `Refund required: paid ${formatMoney(paidAmount)} - current total ${formatMoney(currentTotal)} = return ${formatMoney(refundAmount)} baht.`,
+      reason ? `Reason: ${reason}` : '',
+    ].filter(Boolean).join(' '),
+  );
+};
+
+const attachPaymentToOrder = (order, { paymentMethod, amount, transactionId, slipUrl }) => {
+  order.payment = {
+    method: paymentMethod,
+    amount,
+    transactionId,
+    ...(slipUrl ? { slipUrl } : {}),
+    paidAt: new Date(),
+  };
+
+  if (slipUrl) {
+    order.evidenceImage = slipUrl;
+    order.receiptUrl = slipUrl;
+  }
+};
+
 export const processPayment = async (req, res) => {
   try {
     const orderId = req.params.orderId || req.body.orderId;
@@ -34,55 +73,63 @@ export const processPayment = async (req, res) => {
     }
 
     const expectedAmount = calculateOrderTotal(order);
-    if (Math.abs(numericAmount - expectedAmount) > 0.01) {
+    if (numericAmount + 0.01 < expectedAmount) {
       return res.status(400).json({
-        message: 'Payment amount does not match order total',
+        message: 'Payment amount is less than order total',
         expectedAmount,
       });
     }
 
-    if (!isFutureReservationOrder(order)) {
+    const slipUrl = req.file?.path || '';
+    const paymentResult = { success: true, transactionId: `txn_${Date.now()}` };
+
+    if (!order.inventoryDeductedAt && !isFutureReservationOrder(order)) {
       const requirements = await buildIngredientRequirements(order.orderList);
       const stockError = validateIngredientRequirements(requirements);
       if (stockError) {
-        const shouldClearOrder = order.status === 'pending' && !order.payment?.paidAt;
-        if (shouldClearOrder) {
-          await Order.findByIdAndDelete(order._id);
+        if (slipUrl) {
+          attachPaymentToOrder(order, {
+            paymentMethod,
+            amount: numericAmount,
+            transactionId: paymentResult.transactionId,
+            slipUrl,
+          });
+          appendStaffNoteLine(
+            order,
+            `Stock/change required after slip upload: ${stockError}. Keep this slip; do not ask customer to upload a new picture. If items are removed, return the subtraction difference to the customer.`,
+          );
+          await order.save();
           await broadcastTableOrderUpdate();
+
+          return res.status(409).json({
+            message: `Payment slip was saved, but the order needs staff review because ${stockError}.`,
+            reason: stockError,
+            orderId: order._id,
+            slipSaved: true,
+            evidenceImage: order.evidenceImage,
+            slipUrl: order.payment?.slipUrl || '',
+          });
         }
 
         return res.status(409).json({
-          message: shouldClearOrder
-            ? `Cannot process payment because ${stockError}. The order has been cleared. Please create a new order with available menu quantities.`
-            : `Cannot process payment because ${stockError}.`,
+          message: `Cannot process payment because ${stockError}.`,
           reason: stockError,
-          orderCleared: shouldClearOrder,
         });
       }
     }
-
-    // Simulate payment gateway integration or handle manual slip
-    const paymentResult = { success: true, transactionId: `txn_${Date.now()}` };
 
     if (!paymentResult.success) {
       return res.status(402).json({ message: 'Payment failed' });
     }
 
     order.status = 'pending';
-    const slipUrl = req.file?.path || '';
-
-    order.payment = {
-      method: paymentMethod,
+    attachPaymentToOrder(order, {
+      paymentMethod,
       amount: numericAmount,
       transactionId: paymentResult.transactionId,
-      ...(slipUrl ? { slipUrl } : {}),
-      paidAt: new Date()
-    };
-
-    if (slipUrl) {
-      order.evidenceImage = slipUrl;
-      order.receiptUrl = slipUrl;
-    }
+      slipUrl,
+    });
+    addRefundDifferenceNote(order, numericAmount, expectedAmount, 'Payment amount is higher than current order total.');
 
     await order.save();
     await broadcastTableOrderUpdate();

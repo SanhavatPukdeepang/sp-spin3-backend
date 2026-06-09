@@ -46,11 +46,12 @@ export async function syncIngredientState(ingredientId, { session } = {}) {
   const activeLots = await IngredientLot.find({
     ingredient: ingredientId,
     type: 'IN',
-    remainingQuantity: { $gt: 0 },
+    remainingQuantity: { $ne: 0 },
   }).sort({ expiryDate: 1 }).session(session || null);
 
   const totalQuantity = roundQuantity(activeLots.reduce((sum, lot) => sum + lot.remainingQuantity, 0));
-  const earliestExpiry = activeLots.length > 0 ? activeLots[0].expiryDate : null;
+  const positiveLots = activeLots.filter((lot) => lot.remainingQuantity > 0);
+  const earliestExpiry = positiveLots.length > 0 ? positiveLots[0].expiryDate : null;
   const latestExpiredLot = totalQuantity > 0
     ? null
     : await IngredientLot.findOne({
@@ -82,7 +83,7 @@ export async function syncIngredientState(ingredientId, { session } = {}) {
  * Consumes quantity from active batches (IN entries) in FIFO order (by expiry date)
  * and creates an appropriate transaction record (OUT, ADJUSTMENT, WASTE, etc.)
  */
-export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason = '', { session } = {}) {
+export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason = '', { session, order } = {}) {
   const normalizedAmount = roundQuantity(amount);
   if (normalizedAmount <= 0) {
     throw createInventoryError('Amount must be positive');
@@ -99,9 +100,7 @@ export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason
   const availableQuantity = roundQuantity(
     activeLots.reduce((sum, lot) => sum + toNumber(lot.remainingQuantity), 0),
   );
-  if (availableQuantity < normalizedAmount) {
-    throw createInventoryError('Insufficient stock', 409);
-  }
+  const sourceLots = [];
 
   for (const lot of activeLots) {
     if (remainingToConsume <= 0) break;
@@ -109,7 +108,28 @@ export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason
     const toConsumeFromThisLot = Math.min(lot.remainingQuantity, remainingToConsume);
     lot.remainingQuantity = roundQuantity(lot.remainingQuantity - toConsumeFromThisLot);
     remainingToConsume = roundQuantity(remainingToConsume - toConsumeFromThisLot);
+    sourceLots.push({
+      lot: lot._id,
+      quantity: roundQuantity(toConsumeFromThisLot),
+    });
     await lot.save({ session });
+  }
+
+  if (remainingToConsume > 0) {
+    const deficitQuantity = roundQuantity(remainingToConsume);
+    const deficitLot = await IngredientLot.create([{
+      ingredient: ingredientId,
+      quantity: -deficitQuantity,
+      remainingQuantity: -deficitQuantity,
+      type: 'IN',
+      reason: reason ? `${reason} deficit` : 'Stock deficit',
+      order: order || null,
+    }], { session });
+    sourceLots.push({
+      lot: deficitLot[0]._id,
+      quantity: deficitQuantity,
+    });
+    remainingToConsume = 0;
   }
 
   // Create a record for this consumption
@@ -118,10 +138,12 @@ export async function consumeFromLots(ingredientId, amount, type = 'OUT', reason
     quantity: -normalizedAmount,
     type,
     reason: reason || (type === 'OUT' ? 'Stock consumption' : ''),
+    sourceLots,
+    order: order || null,
   });
   await movement.save({ session });
 
-  return remainingToConsume; // 0 if enough stock was available
+  return { remainingToConsume, movement, sourceLots }; // remaining is 0 if enough stock was available
 }
 
 export async function processExpiredIngredientLots({ broadcast = true, session } = {}) {

@@ -18,6 +18,17 @@ const ingredientLotSchema = new mongoose.Schema(
     reason: { type: String, default: "" },
     // Only for type: "IN" entries, to track how much of this specific lot is left
     remainingQuantity: { type: Number, default: 0 },
+    sourceLots: [
+      {
+        lot: { type: mongoose.Schema.Types.ObjectId, ref: "IngredientLot" },
+        quantity: { type: Number, required: true },
+      },
+    ],
+    order: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Order",
+      default: null,
+    },
   },
   { timestamps: true },
 );
