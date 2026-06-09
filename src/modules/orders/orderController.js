@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import { Order } from './Order.js';
-import { Counter } from './Counter.js';
+import { getNextOrderId } from './orderId.js';
 import { Ingredient } from '../ingredients/Ingredient.js';
 import { Menu } from '../menus/Menu.js';
 import { User } from '../users/User.js';
@@ -15,6 +15,26 @@ const normalizeOrderItemQuantity = (quantity) => {
   if (!Number.isFinite(numericQuantity) || numericQuantity < 1) return 1;
   return Math.trunc(numericQuantity);
 };
+
+const getTodayDateValue = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Bangkok',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(new Date());
+
+export const isReservationOrder = (orderBody) =>
+  String(orderBody?.customer?.note || '').split('|')[0] === 'reserve' ||
+  Boolean(orderBody?.reservationPax && orderBody?.bookingDate && orderBody?.bookingTime);
+
+export const isFutureReservationOrder = (orderBody) => {
+  const orderMode = String(orderBody?.customer?.note || '').split('|')[0];
+  return (orderMode === 'reserve' || isReservationOrder(orderBody)) &&
+    String(orderBody?.bookingDate || '') > getTodayDateValue();
+};
+
+const isDueReservationOrder = (order) =>
+  isReservationOrder(order) && String(order?.bookingDate || '') <= getTodayDateValue();
 
 const isDataImage = (value) =>
   typeof value === 'string' && /^data:image\/(png|jpe?g|webp);base64,/i.test(value);
@@ -119,6 +139,37 @@ const deductOrderInventoryIfNeeded = async (order, { session } = {}) => {
 
   await deductIngredientRequirements(requirements, { session });
   order.inventoryDeductedAt = new Date();
+};
+
+export const processDueReservationInventory = async () => {
+  const dueReservations = await Order.find({
+    inventoryDeductedAt: { $exists: false },
+    bookingDate: { $lte: getTodayDateValue() },
+    reservationPax: { $exists: true },
+    'payment.paidAt': { $exists: true },
+    status: { $nin: ['cancelled', 'delivered', 'received'] },
+  });
+
+  let deductedCount = 0;
+  const errors = [];
+
+  for (const order of dueReservations) {
+    try {
+      if (!isDueReservationOrder(order)) continue;
+      await deductOrderInventoryIfNeeded(order);
+      await order.save();
+      deductedCount += 1;
+    } catch (err) {
+      errors.push({ orderId: order.orderId || String(order._id), message: err.message });
+    }
+  }
+
+  if (deductedCount > 0) {
+    await broadcastIngredientSnapshot();
+    await broadcastTableOrderUpdate();
+  }
+
+  return { checkedCount: dueReservations.length, deductedCount, errors };
 };
 
 const ITEM_DONE_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelled']);
@@ -241,13 +292,7 @@ export const createOrder = async (req, res) => {
   try {
     await processExpiredIngredientLots({ broadcast: false });
     
-    // Generate sequential orderId
-    const counter = await Counter.findOneAndUpdate(
-      { id: 'orderId' },
-      { $inc: { seq: 1 } },
-      { returnDocument: 'after', upsert: true }
-    );
-    const orderIdStr = `SFC-${String(counter.seq).padStart(4, '0')}`;
+    const orderIdStr = await getNextOrderId();
 
     const user = await User.findById(req.user.id).select('phone role');
     const isCashier = user?.role === 'cashier' || req.user.role === 'cashier';
@@ -265,10 +310,12 @@ export const createOrder = async (req, res) => {
         }))
       : [];
 
-    const requirements = await buildIngredientRequirements(orderList);
-    const stockError = validateIngredientRequirements(requirements);
-    if (stockError) {
-      return res.status(400).json({ message: stockError });
+    if (!isFutureReservationOrder(req.body)) {
+      const requirements = await buildIngredientRequirements(orderList);
+      const stockError = validateIngredientRequirements(requirements);
+      if (stockError) {
+        return res.status(400).json({ message: stockError });
+      }
     }
 
     // Default customer logic for cashiers
@@ -368,7 +415,7 @@ export const updateOrderStatus = async (req, res) => {
     Object.assign(order, updates);
 
     let updatedOrder;
-    if (req.body.status === 'preparing' && !order.inventoryDeductedAt) {
+    if (req.body.status === 'preparing' && !order.inventoryDeductedAt && !isFutureReservationOrder(order)) {
       session = await mongoose.startSession();
       await session.withTransaction(async () => {
         const lockedOrder = await Order.findById(req.params.id).session(session);

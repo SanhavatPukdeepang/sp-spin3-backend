@@ -2,15 +2,14 @@ import { Order } from '../orders/Order.js';
 import {
   buildIngredientRequirements,
   calculateOrderTotal,
+  isFutureReservationOrder,
+  isReservationOrder,
   validateIngredientRequirements,
 } from '../orders/orderController.js';
 import { broadcastTableOrderUpdate } from '../../realtime/tableOrderSocket.js';
 
 const isStaffPaymentUser = (user) => ['owner', 'cashier'].includes(user?.role);
 const isOrderOwner = (order, user) => String(order.customer?.userId || '') === String(user?.id || '');
-const isReservationOrder = (order) =>
-  String(order?.customer?.note || '').split('|')[0] === 'reserve' ||
-  Boolean(order?.reservationPax && order?.bookingDate && order?.bookingTime);
 
 export const processPayment = async (req, res) => {
   try {
@@ -42,22 +41,24 @@ export const processPayment = async (req, res) => {
       });
     }
 
-    const requirements = await buildIngredientRequirements(order.orderList);
-    const stockError = validateIngredientRequirements(requirements);
-    if (stockError) {
-      const shouldClearOrder = order.status === 'pending' && !order.payment?.paidAt;
-      if (shouldClearOrder) {
-        await Order.findByIdAndDelete(order._id);
-        await broadcastTableOrderUpdate();
-      }
+    if (!isFutureReservationOrder(order)) {
+      const requirements = await buildIngredientRequirements(order.orderList);
+      const stockError = validateIngredientRequirements(requirements);
+      if (stockError) {
+        const shouldClearOrder = order.status === 'pending' && !order.payment?.paidAt;
+        if (shouldClearOrder) {
+          await Order.findByIdAndDelete(order._id);
+          await broadcastTableOrderUpdate();
+        }
 
-      return res.status(409).json({
-        message: shouldClearOrder
-          ? `Cannot process payment because ${stockError}. The order has been cleared. Please create a new order with available menu quantities.`
-          : `Cannot process payment because ${stockError}.`,
-        reason: stockError,
-        orderCleared: shouldClearOrder,
-      });
+        return res.status(409).json({
+          message: shouldClearOrder
+            ? `Cannot process payment because ${stockError}. The order has been cleared. Please create a new order with available menu quantities.`
+            : `Cannot process payment because ${stockError}.`,
+          reason: stockError,
+          orderCleared: shouldClearOrder,
+        });
+      }
     }
 
     // Simulate payment gateway integration or handle manual slip
