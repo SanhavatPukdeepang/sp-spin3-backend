@@ -23,7 +23,8 @@ const getTodayDateValue = () => new Intl.DateTimeFormat('en-CA', {
   day: '2-digit',
 }).format(new Date());
 
-const SCHEDULED_COOK_LEAD_MINUTES = 30;
+const PICKUP_COOK_LEAD_MINUTES = 30;
+const RESERVATION_COOK_LEAD_MINUTES = 30;
 
 const getOrderMode = (orderBody) => String(orderBody?.customer?.note || '').split('|')[0];
 
@@ -50,7 +51,12 @@ const getScheduledCookStartAt = (order) => {
 
   const serviceAt = new Date(`${order.bookingDate}T${serviceTime}:00+07:00`);
   if (Number.isNaN(serviceAt.getTime())) return null;
-  return new Date(serviceAt.getTime() - SCHEDULED_COOK_LEAD_MINUTES * 60 * 1000);
+
+  const leadMinutes =
+    orderMode === 'reserve' || isReservationOrder(order)
+      ? RESERVATION_COOK_LEAD_MINUTES
+      : PICKUP_COOK_LEAD_MINUTES;
+  return new Date(serviceAt.getTime() - leadMinutes * 60 * 1000);
 };
 
 const assertScheduledCookWindow = (order) => {
@@ -58,7 +64,7 @@ const assertScheduledCookWindow = (order) => {
   if (!cookStartAt || Date.now() >= cookStartAt.getTime()) return;
 
   const error = new Error(
-    `This scheduled order can only start cooking 10 minutes before pickup or reservation time.`,
+    `This scheduled order is not ready for cooking yet.`,
   );
   error.statusCode = 409;
   throw error;
@@ -376,7 +382,7 @@ export const createOrder = async (req, res) => {
     await broadcastTableOrderUpdate();
     res.status(201).json(newOrder);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(err.statusCode || 400).json({ message: err.message });
   }
 };
 
@@ -406,7 +412,7 @@ export const updateOrderItemStatus = async (req, res) => {
     await broadcastTableOrderUpdate();
     res.json(reconciled);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    res.status(err.statusCode || 400).json({ message: err.message });
   }
 };
 
