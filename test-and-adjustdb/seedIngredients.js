@@ -339,6 +339,38 @@ const ingredients = [
     low_stock_threshold: 30,
     active_status: true,
   },
+  {
+    name: 'Coca-Cola',
+    quantity: 240,
+    unit: 'bottles',
+    price_per_unit: 18,
+    low_stock_threshold: 48,
+    active_status: true,
+  },
+  {
+    name: 'Chocolate Float',
+    quantity: 120,
+    unit: 'bottles',
+    price_per_unit: 28,
+    low_stock_threshold: 24,
+    active_status: true,
+  },
+  {
+    name: 'Soju Original',
+    quantity: 60,
+    unit: 'bottles',
+    price_per_unit: 95,
+    low_stock_threshold: 12,
+    active_status: true,
+  },
+  {
+    name: 'Makgeolli',
+    quantity: 60,
+    unit: 'bottles',
+    price_per_unit: 110,
+    low_stock_threshold: 12,
+    active_status: true,
+  },
 
   // MISCELLANEOUS
   {

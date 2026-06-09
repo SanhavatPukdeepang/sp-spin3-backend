@@ -7,6 +7,7 @@ import { connectDB } from './configs/mongodb.js'
 import { router as apiRoutes } from './routes/index.js'
 import { router as ownerCompatRoutes } from './routes/ownerCompat.js'
 import { processExpiredIngredientLots } from './modules/ingredients/inventoryLifecycle.js'
+import { processDueReservationInventory } from './modules/orders/orderController.js'
 import { initIngredientSocket } from './realtime/ingredientSocket.js'
 import { initTableOrderSocket } from './realtime/tableOrderSocket.js'
 
@@ -62,8 +63,24 @@ const sweepExpiredIngredientLots = async () => {
   }
 }
 
+const sweepDueReservationInventory = async () => {
+  try {
+    const result = await processDueReservationInventory()
+    if (result.deductedCount > 0) {
+      console.log(`Deducted inventory for ${result.deductedCount} due reservation order(s)`)
+    }
+    if (result.errors.length > 0) {
+      console.error('Due reservation inventory errors:', result.errors)
+    }
+  } catch (err) {
+    console.error('Due reservation inventory sweep failed:', err.message)
+  }
+}
+
 await sweepExpiredIngredientLots()
+await sweepDueReservationInventory()
 setInterval(sweepExpiredIngredientLots, 10 * 60 * 1000)
+setInterval(sweepDueReservationInventory, 10 * 60 * 1000)
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
