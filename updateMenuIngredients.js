@@ -1,10 +1,9 @@
-import dotenv from 'dotenv';
 import mongoose from 'mongoose';
-import { connectDB } from '../src/configs/mongodb.js';
-import { Ingredient } from '../src/modules/ingredients/Ingredient.js';
-import { Menu } from '../src/modules/menus/Menu.js';
-
-dotenv.config();
+import { connectDB } from './src/configs/mongodb.js';
+import { Ingredient } from './src/modules/ingredients/Ingredient.js';
+import { IngredientLot } from './src/modules/ingredients/IngredientLot.js';
+import { syncIngredientState } from './src/modules/ingredients/inventoryLifecycle.js';
+import { Menu } from './src/modules/menus/Menu.js';
 
 const countBasedUnits = new Set(['piece', 'pieces', 'jar', 'jars', 'bottle', 'bottles']);
 
@@ -16,6 +15,13 @@ const normalizeRecipeQuantity = (quantity, unit = '') => {
   }
   return numericQuantity;
 };
+
+const beverageIngredients = [
+  { name: 'Coca-Cola', quantity: 240, unit: 'bottles', price_per_unit: 18, low_stock_threshold: 48 },
+  { name: 'Chocolate Float', quantity: 120, unit: 'bottles', price_per_unit: 28, low_stock_threshold: 24 },
+  { name: 'Soju Original', quantity: 60, unit: 'bottles', price_per_unit: 95, low_stock_threshold: 12 },
+  { name: 'Makgeolli', quantity: 60, unit: 'bottles', price_per_unit: 110, low_stock_threshold: 12 },
+];
 
 const menuRecipes = {
   'Signature 8pc Bucket': [
@@ -176,9 +182,61 @@ const menuRecipes = {
   ],
 };
 
+const oneYearFromNow = () => {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() + 1);
+  return date;
+};
+
+const ensureBeverageIngredients = async () => {
+  const ensuredIngredients = [];
+
+  for (const beverage of beverageIngredients) {
+    let ingredient = await Ingredient.findOne({ name: beverage.name });
+    if (!ingredient) {
+      ingredient = await Ingredient.create({
+        ingredient_index: 0,
+        name: beverage.name,
+        quantity: 0,
+        unit: beverage.unit,
+        price_per_unit: beverage.price_per_unit,
+        low_stock_threshold: beverage.low_stock_threshold,
+        active_status: true,
+      });
+      console.log(`Created beverage ingredient: ${beverage.name}`);
+    }
+
+    const activeLot = await IngredientLot.findOne({
+      ingredient: ingredient._id,
+      type: 'IN',
+      remainingQuantity: { $gt: 0 },
+    });
+
+    if (!activeLot) {
+      await IngredientLot.create({
+        ingredient: ingredient._id,
+        quantity: beverage.quantity,
+        remainingQuantity: beverage.quantity,
+        unit: beverage.unit,
+        expiryDate: oneYearFromNow(),
+        type: 'IN',
+        reason: 'Seed beverage stock lot',
+      });
+      await syncIngredientState(ingredient._id);
+      console.log(`Created stock lot for beverage ingredient: ${beverage.name}`);
+    }
+
+    ensuredIngredients.push(ingredient);
+  }
+
+  return ensuredIngredients;
+};
+
 async function updateMenuIngredients() {
   try {
     await connectDB();
+
+    await ensureBeverageIngredients();
 
     const ingredients = await Ingredient.find();
     const ingredientByName = new Map(ingredients.map((ingredient) => [ingredient.name, ingredient]));
@@ -201,6 +259,11 @@ async function updateMenuIngredients() {
         })
         .filter(Boolean);
 
+      if (ingredientsForMenu.length === 0) {
+        console.warn(`Skipped ${menuName}: recipe has no valid ingredients`);
+        continue;
+      }
+
       const result = await Menu.updateOne(
         { name: menuName },
         { $set: { ingredients: ingredientsForMenu } },
@@ -216,6 +279,11 @@ async function updateMenuIngredients() {
 
     if (missingIngredients.size > 0) {
       console.warn('Missing ingredient records:', [...missingIngredients].join(', '));
+    }
+
+    const menusWithoutRecipes = await Menu.find({ $or: [{ ingredients: { $exists: false } }, { ingredients: { $size: 0 } }] });
+    if (menusWithoutRecipes.length > 0) {
+      console.warn('Menus still missing recipes:', menusWithoutRecipes.map((menu) => menu.name).join(', '));
     }
 
     console.log(`Done. Updated ${updatedCount} menu records.`);

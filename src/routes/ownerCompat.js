@@ -6,6 +6,7 @@ import { router as tableRouter } from './table.js';
 import { isAuth, isEligible } from '../middleware/auth.js';
 import { Menu } from '../modules/menus/Menu.js';
 import { Order } from '../modules/orders/Order.js';
+import { getNextOrderId } from '../modules/orders/orderId.js';
 
 export const router = Router();
 const orderAdminAccess = [isAuth, isEligible('owner', 'cashier')];
@@ -209,6 +210,7 @@ router.post('/orders', orderAdminAccess, async (req, res) => {
     const items = Array.isArray(req.body.items) ? req.body.items : [];
     const total = items.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 1), 0);
     const order = await Order.create({
+      orderId: await getNextOrderId(),
       type: toBackendOrderType(req.body.type || 'In-Restaurant'),
       user_id: String(req.user.id),
       customerId: req.user.id,

@@ -170,12 +170,15 @@ router.get('/stock', ownerOnly, async (req, res) => {
 
 router.patch('/stock/:id', ownerOnly, async (req, res) => {
   try {
+    const currentIngredient = await Ingredient.findById(req.params.id).select('_id');
+    if (!currentIngredient) return res.status(404).json({ message: 'Stock item not found' });
+
     const updates = {};
     if (req.body.ingredientName !== undefined || req.body.name !== undefined) {
       const nextName = String(req.body.ingredientName ?? req.body.name).trim();
       if (!nextName) return res.status(400).json({ message: 'Ingredient name is required' });
       const duplicate = await Ingredient.findOne({
-        _id: { $ne: ingredient._id },
+        _id: { $ne: currentIngredient._id },
         name: new RegExp(`^${escapeRegex(nextName)}$`, 'i'),
       });
       if (duplicate) return res.status(409).json({ message: 'Ingredient name already exists' });
