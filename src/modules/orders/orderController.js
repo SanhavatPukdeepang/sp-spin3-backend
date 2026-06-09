@@ -259,8 +259,8 @@ export const createOrder = async (req, res) => {
     delete safeOrderBody.user_id;
     delete safeOrderBody.deliveredAt;
     delete safeOrderBody.evidenceImage;
-    const orderList = Array.isArray(req.body.orderList)
-      ? req.body.orderList.map((item) => ({
+    const orderList = Array.isArray(req.body.orderList || req.body.items)
+      ? (req.body.orderList || req.body.items).map((item) => ({
           ...item,
           quantity: normalizeOrderItemQuantity(item.quantity),
         }))

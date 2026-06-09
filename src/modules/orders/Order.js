@@ -50,6 +50,13 @@ const orderSchema = new mongoose.Schema({
     default: 'pending' 
   },
   createdAt: { type: Date, default: Date.now }
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+orderSchema.virtual('items').get(function() {
+  return this.orderList;
 });
 
 orderSchema.index({ createdAt: -1 });
