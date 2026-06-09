@@ -68,7 +68,7 @@ export const processPayment = async (req, res) => {
       return res.status(402).json({ message: 'Payment failed' });
     }
 
-    order.status = isReservationOrder(order) ? 'reserved' : 'pending';
+    order.status = 'pending';
     const slipUrl = req.file?.path || '';
 
     order.payment = {
