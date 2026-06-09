@@ -57,5 +57,6 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ user_id: 1, createdAt: -1 });
 orderSchema.index({ 'customer.userId': 1, createdAt: -1 });
+orderSchema.index({ type: 1, status: 1, createdAt: -1 });
 
 export const Order = mongoose.model('Order', orderSchema);

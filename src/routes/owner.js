@@ -154,19 +154,44 @@ router.get('/summary', ownerOnly, async (req, res) => {
       dateFilter = buildDateFilter(period);
     }
 
-    const orders = await Order.find({ createdAt: dateFilter });
-    const revenue = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
-    const activeTables = await Order.countDocuments({
-      status: { $in: ['pending', 'preparing'] },
-      type: 'Onsite',
-      createdAt: dateFilter,
-    });
+    const stats = await Order.aggregate([
+      { $match: { createdAt: dateFilter } },
+      {
+        $group: {
+          _id: null,
+          revenue: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', ['finished', 'delivered', 'completed', 'received']] },
+                { $ifNull: ['$payment.amount', 0] },
+                0
+              ]
+            }
+          },
+          orderCount: { $sum: 1 },
+          activeTables: {
+            $sum: {
+              $cond: [
+                { $and: [
+                  { $in: ['$status', ['pending', 'preparing']] },
+                  { $eq: ['$type', 'Onsite'] }
+                ]},
+                1,
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
+    const result = stats[0] || { revenue: 0, orderCount: 0, activeTables: 0 };
 
     res.json({
-      revenue,
-      orders: orders.length,
-      aov: orders.length ? revenue / orders.length : 0,
-      activeTables,
+      revenue: result.revenue,
+      orders: result.orderCount,
+      aov: result.orderCount ? result.revenue / result.orderCount : 0,
+      activeTables: result.activeTables,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

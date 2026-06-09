@@ -28,7 +28,8 @@
     "seed:orders": "node --env-file=.env test-and-adjustdb/seedOrders.js",
     "migrate:owner-schema": "node --env-file=.env migrateOwnerSchema.js",
     "upload:assets": "node --env-file=.env uploadExistingImages.js",
-    "update:menu-images": "node --env-file=.env updateMenuImages.js"
+    "update:menu-images": "node --env-file=.env updateMenuImages.js",
+    "seed:mockdata": "node test-and-adjustdb/seedMockData.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
