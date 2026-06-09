@@ -259,6 +259,35 @@ const ORDER_TERMINAL_STATUSES = new Set(['completed', 'shipping', 'delivered', '
 const ITEM_CANCELLED_STATUSES = new Set(['cancel', 'cancelled']);
 const REDO_SOURCE_ITEM_STATUSES = new Set(['finished', 'completed', 'cancel', 'cancelled']);
 
+const formatMoney = (value) =>
+  Number(value || 0).toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+const appendStaffNoteLine = (order, line) => {
+  const note = String(order.note_global || '').trim();
+  order.note_global = note ? `${note}\n${line}` : line;
+};
+
+const appendRefundDifferenceNoteIfNeeded = (order, reason = '') => {
+  if (!order?.payment?.paidAt || !Number.isFinite(Number(order.payment.amount))) return false;
+
+  const paidAmount = Number(order.payment.amount || 0);
+  const currentTotal = calculateOrderTotal(order);
+  const refundAmount = Math.round(Math.max(0, paidAmount - currentTotal) * 100) / 100;
+  if (refundAmount <= 0) return false;
+
+  appendStaffNoteLine(
+    order,
+    [
+      `Refund required: paid ${formatMoney(paidAmount)} - current total ${formatMoney(currentTotal)} = return ${formatMoney(refundAmount)} baht.`,
+      reason ? `Reason: ${reason}` : '',
+    ].filter(Boolean).join(' '),
+  );
+  return true;
+};
+
 export const calculateOrderTotal = (order) => {
   const items = Array.isArray(order?.orderList) ? order.orderList : [];
   const subtotal = items.reduce((sum, item) => {
@@ -525,7 +554,9 @@ export const updateOrderItemStatus = async (req, res) => {
       const restoredInventory =
         reconciled.status === 'cancelled' &&
         await restoreOrderInventoryIfPossible(reconciled);
+      const addedRefundNote = appendRefundDifferenceNoteIfNeeded(reconciled, 'Order item changed or cancelled after payment.');
       if (restoredInventory) await reconciled.save();
+      if (addedRefundNote && !restoredInventory) await reconciled.save();
       shouldBroadcastIngredientSnapshot = restoredInventory;
     }
 
@@ -592,6 +623,7 @@ export const updateOrderStatus = async (req, res) => {
 
         Object.assign(lockedOrder, updates);
         const restoredInventory = await restoreOrderInventoryIfPossible(lockedOrder, { session });
+        appendRefundDifferenceNoteIfNeeded(lockedOrder, req.body.cancelReason || 'Order cancelled after payment.');
         updatedOrder = await lockedOrder.save({ session });
         shouldBroadcastIngredientSnapshot = restoredInventory;
       });
@@ -611,6 +643,9 @@ export const updateOrderStatus = async (req, res) => {
       });
       shouldBroadcastIngredientSnapshot = true;
     } else {
+      if (req.body.status === 'cancelled') {
+        appendRefundDifferenceNoteIfNeeded(order, req.body.cancelReason || 'Order cancelled after payment.');
+      }
       updatedOrder = await order.save();
     }
 
