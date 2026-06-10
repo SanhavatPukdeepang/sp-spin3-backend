@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { Ingredient } from './src/modules/ingredients/Ingredient.js';
-import { IngredientLot } from './src/modules/ingredients/IngredientLot.js';
-import { syncIngredientState } from './src/modules/ingredients/inventoryLifecycle.js';
-import { connectDB } from './src/configs/mongodb.js';
+import { Ingredient } from '../src/modules/ingredients/Ingredient.js';
+import { IngredientLot } from '../src/modules/ingredients/IngredientLot.js';
+import { syncIngredientState } from '../src/modules/ingredients/inventoryLifecycle.js';
+import { connectDB } from '../src/configs/mongodb.js';
 
 dotenv.config();
 

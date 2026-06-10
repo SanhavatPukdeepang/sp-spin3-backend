@@ -14,10 +14,14 @@ import {
   deleteIngredientLot,
 } from '../modules/ingredients/ingredientController.js';
 import { isAuth, isEligible } from '../middleware/auth.js';
+import { sseHandler } from '../utils/sse.js';
 
 export const router = Router();
 
 const kitchenStockAccess = [isAuth, isEligible('owner', 'cook')];
+
+// SSE Stream
+router.get('/stream', sseHandler);
 
 // GET all ingredients
 router.get('/', kitchenStockAccess, getAllIngredients);

@@ -57,6 +57,13 @@ const orderSchema = new mongoose.Schema({
     default: 'pending' 
   },
   createdAt: { type: Date, default: Date.now }
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+orderSchema.virtual('items').get(function() {
+  return this.orderList;
 });
 
 orderSchema.index({ createdAt: -1 });
@@ -64,5 +71,13 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ customerId: 1, createdAt: -1 });
 orderSchema.index({ user_id: 1, createdAt: -1 });
 orderSchema.index({ 'customer.userId': 1, createdAt: -1 });
+orderSchema.index({ type: 1, status: 1, createdAt: -1 });
+
+// Virtual: alias orderList as items for frontend compatibility
+orderSchema.virtual('items').get(function () {
+  return this.orderList;
+});
+orderSchema.set('toJSON', { virtuals: true });
+orderSchema.set('toObject', { virtuals: true });
 
 export const Order = mongoose.model('Order', orderSchema);
