@@ -665,6 +665,14 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     if (req.body.note_global !== undefined) updates.note_global = req.body.note_global;
+    if (req.body.cancelReason !== undefined) updates.cancelReason = req.body.cancelReason;
+    if (req.body.status === 'cancelled') {
+      updates.cancelledBy = {
+        userId: req.user?.id || req.user?._id || '',
+        name: [req.user?.name, req.user?.surname].filter(Boolean).join(' ').trim() || req.user?.username || req.user?.role || 'Staff',
+        role: req.user?.role || '',
+      };
+    }
     if (req.body.rider !== undefined) updates.rider = req.body.rider;
     if (req.body.evidenceImage !== undefined) {
       updates.evidenceImage = await uploadDeliveryEvidence(req.body.evidenceImage, order._id);
