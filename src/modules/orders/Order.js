@@ -32,6 +32,12 @@ const orderSchema = new mongoose.Schema({
   tableId: { type: String },
   reservationPax: { type: Number },
   note_global: { type: String },
+  cancelReason: { type: String },
+  cancelledBy: {
+    userId: { type: String },
+    name: { type: String },
+    role: { type: String },
+  },
   rider: { userId: String, name: String, phone: String, vehicle: String, plate: String },
   orderList: [embeddedOrderItemSchema],
   payment: {
