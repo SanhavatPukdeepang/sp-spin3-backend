@@ -396,9 +396,6 @@ const toPublicRider = (rider) => {
     _id: rider._id,
     name: [rider.name, rider.surname].filter(Boolean).join(' ').trim() || rider.username || 'Rider',
     phone: rider.phone || '',
-    image: rider.image || rider.photoUrl || rider.profileImage || rider.avatar || '',
-    photoUrl: rider.photoUrl || rider.image || rider.profileImage || rider.avatar || '',
-    profileImage: rider.profileImage || rider.image || rider.photoUrl || rider.avatar || '',
   };
 };
 
@@ -407,18 +404,18 @@ const attachDeliveryRider = async (order) => {
 
   const orderObject = typeof order.toObject === 'function' ? order.toObject() : { ...order };
   if (orderObject.type !== 'delivery') return orderObject;
-  if (orderObject.rider?.name || orderObject.rider?.phone || orderObject.rider?.image || orderObject.rider?.photoUrl || orderObject.rider?.profileImage) {
+  if (orderObject.rider?.name || orderObject.rider?.phone) {
     return orderObject;
   }
 
   const delivery = await Delivery.findOne({ order: orderObject._id })
-    .populate('rider_id', 'name surname username phone image photoUrl profileImage avatar')
+    .populate('rider_id', 'name surname username phone')
     .sort({ updatedAt: -1, createdAt: -1 });
 
   const rider =
     delivery?.rider_id ||
     await User.findOne({ role: 'rider', active_status: { $ne: false } })
-      .select('name surname username phone image photoUrl profileImage avatar')
+      .select('name surname username phone')
       .sort({ createdAt: 1 });
 
   return {
