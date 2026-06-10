@@ -29,7 +29,8 @@ const userSchema = new mongoose.Schema({
   },
   phone: { type: String, trim: true },
   addresses: [addressSchema],
-  active_status: { type: Boolean, default: true }
+  active_status: { type: Boolean, default: true },
+  on_duty: { type: Boolean, default: false }
 }, { timestamps: true })
 
 export const User = mongoose.model('User', userSchema)

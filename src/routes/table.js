@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Table } from '../modules/tables/Table.js';
 import { Order } from '../modules/orders/Order.js';
 import { broadcastTableOrderUpdate } from '../realtime/tableOrderSocket.js';
+import { sseHandler } from '../utils/sse.js';
 
 export const router = Router();
 
@@ -33,6 +34,8 @@ const getTableNumber = (table) => {
 };
 
 const normalizeSlot = (value = '') => String(value).replace(/\s+/g, '');
+
+router.get('/stream', sseHandler);
 
 router.get('/availability', async (req, res) => {
   try {

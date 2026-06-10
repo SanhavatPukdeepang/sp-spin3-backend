@@ -33,20 +33,28 @@ const ownerRoleToUserRole = (role) => {
 };
 
 const buildDateFilter = (period) => {
-  const now = new Date();
-  const start = new Date(now);
+  const BKK_OFFSET = 7 * 60 * 60 * 1000;
+  const nowUTC = Date.now();
+  const nowBKK = new Date(nowUTC + BKK_OFFSET);
+
+  const todayBKK = new Date(nowBKK);
+  todayBKK.setUTCHours(0, 0, 0, 0);
+  const todayStartUTC = new Date(todayBKK.getTime() - BKK_OFFSET);
 
   if (period === 'today') {
-    start.setHours(0, 0, 0, 0);
-  } else if (period === 'month') {
-    start.setDate(1);
-    start.setHours(0, 0, 0, 0);
-  } else {
-    start.setDate(start.getDate() - 6);
-    start.setHours(0, 0, 0, 0);
+    return { $gte: todayStartUTC, $lte: new Date(nowUTC) };
   }
 
-  return { $gte: start, $lte: now };
+  if (period === 'month') {
+    const monthStartBKK = new Date(nowBKK);
+    monthStartBKK.setUTCDate(1);
+    monthStartBKK.setUTCHours(0, 0, 0, 0);
+    const monthStartUTC = new Date(monthStartBKK.getTime() - BKK_OFFSET);
+    return { $gte: monthStartUTC, $lte: new Date(nowUTC) };
+  }
+
+  const weekStartUTC = new Date(todayStartUTC.getTime() - 6 * 24 * 60 * 60 * 1000);
+  return { $gte: weekStartUTC, $lte: new Date(nowUTC) };
 };
 
 const getOrderTotal = (order) => {
@@ -135,24 +143,63 @@ const toStaffMember = (user) => ({
   area: user.role === 'cook' ? 'Kitchen' : user.role === 'rider' ? 'Delivery' : 'Front of house',
   lastLogin: user.updatedAt || user.createdAt,
   isLocked: user.active_status === false,
+  on_duty: user.on_duty,
   isPending: false,
 });
 
 router.get('/summary', ownerOnly, async (req, res) => {
   try {
-    const createdAt = buildDateFilter(req.query.period);
-    const orders = await Order.find({ createdAt });
-    const revenue = orders.reduce((sum, order) => sum + getOrderTotal(order), 0);
-    const activeTables = await Order.countDocuments({
-      status: { $in: ['pending', 'preparing'] },
-      type: 'Onsite',
-    });
+    const { period, startDate, endDate } = req.query;
+    let dateFilter = {};
+
+    if (startDate && endDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      dateFilter = { $gte: start, $lte: end };
+    } else {
+      dateFilter = buildDateFilter(period);
+    }
+
+    const stats = await Order.aggregate([
+      { $match: { createdAt: dateFilter } },
+      {
+        $group: {
+          _id: null,
+          revenue: {
+            $sum: {
+              $cond: [
+                { $in: ['$status', ['finished', 'delivered', 'completed', 'received']] },
+                { $ifNull: ['$payment.amount', 0] },
+                0
+              ]
+            }
+          },
+          orderCount: { $sum: 1 },
+          activeTables: {
+            $sum: {
+              $cond: [
+                { $and: [
+                  { $in: ['$status', ['pending', 'preparing']] },
+                  { $eq: ['$type', 'Onsite'] }
+                ]},
+                1,
+                0
+              ]
+            }
+          }
+        }
+      }
+    ]);
+
+    const result = stats[0] || { revenue: 0, orderCount: 0, activeTables: 0 };
 
     res.json({
-      revenue,
-      orders: orders.length,
-      aov: orders.length ? revenue / orders.length : 0,
-      activeTables,
+      revenue: result.revenue,
+      orders: result.orderCount,
+      aov: result.orderCount ? result.revenue / result.orderCount : 0,
+      activeTables: result.activeTables,
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
