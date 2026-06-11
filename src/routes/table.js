@@ -35,6 +35,12 @@ const getTableNumber = (table) => {
 
 const normalizeSlot = (value = '') => String(value).replace(/\s+/g, '');
 
+const getReservationSeatFilter = (pax) => {
+  if (pax <= 2) return { $lte: 2 };
+  if (pax <= 6) return { $gte: 3, $lte: 6 };
+  return { $gte: 7, $lte: 10 };
+};
+
 router.get('/stream', sseHandler);
 
 router.get('/availability', async (req, res) => {
@@ -50,7 +56,7 @@ router.get('/availability', async (req, res) => {
     const tables = await Table.find({
       active_status: { $ne: false },
       onlineReservable: { $ne: false },
-      seats: { $gte: pax },
+      seats: getReservationSeatFilter(pax),
     }).sort({ seats: 1, number: 1, table_Id: 1 });
 
     const tableIds = tables.map((table) => table.table_Id);

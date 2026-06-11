@@ -8,6 +8,7 @@ import { User } from '../users/User.js';
 import { Delivery } from '../delivery/Delivery.js';
 import { Settings } from '../settings/Settings.js';
 import { Waste } from '../wastes/Waste.js';
+import { Table } from '../tables/Table.js';
 import cloudinary from '../../configs/cloudinary.js';
 import { processExpiredIngredientLots, consumeFromLots, syncIngredientState } from '../ingredients/inventoryLifecycle.js';
 import { broadcastIngredientSnapshot } from '../../realtime/ingredientSocket.js';
@@ -31,6 +32,14 @@ const RESERVATION_COOK_LEAD_MINUTES = 30;
 const DEFAULT_RESERVATION_THRESHOLDS = { oneTwoMin: 300, threeSixMin: 600, sevenTenMin: 1000 };
 
 const getOrderMode = (orderBody) => String(orderBody?.customer?.note || '').split('|')[0];
+
+const normalizeReservationSlot = (value = '') => String(value).replace(/\s+/g, '');
+
+const getReservationSeatFilter = (pax) => {
+  if (pax <= 2) return { $lte: 2 };
+  if (pax <= 6) return { $gte: 3, $lte: 6 };
+  return { $gte: 7, $lte: 10 };
+};
 
 export const isReservationOrder = (orderBody) =>
   getOrderMode(orderBody) === 'reserve' ||
@@ -365,6 +374,38 @@ const createRedoWasteEntries = async (order, item, requirements, { session, user
   }
 };
 
+const findAvailableReservationTable = async ({ bookingDate, bookingTime, reservationPax, tableId }, { session } = {}) => {
+  const pax = Number(reservationPax || 0);
+  if (!bookingDate || !bookingTime || !pax) return null;
+
+  const tableQuery = {
+    active_status: { $ne: false },
+    onlineReservable: { $ne: false },
+    seats: getReservationSeatFilter(pax),
+  };
+  if (tableId) tableQuery.table_Id = tableId;
+
+  const tables = await Table.find(tableQuery)
+    .sort({ seats: 1, number: 1, table_Id: 1 })
+    .session(session || null);
+  if (tables.length === 0) return null;
+
+  const tableIds = tables.map((table) => table.table_Id);
+  const reservations = await Order.find({
+    bookingDate,
+    tableId: { $in: tableIds },
+    status: { $nin: ['cancelled', 'completed', 'delivered', 'received'] },
+  }).select('bookingTime tableId').session(session || null);
+
+  const busyTableIds = new Set(
+    reservations
+      .filter((order) => normalizeReservationSlot(order.bookingTime) === normalizeReservationSlot(bookingTime))
+      .map((order) => order.tableId),
+  );
+
+  return tables.find((table) => !busyTableIds.has(table.table_Id)) || null;
+};
+
 const deductRedoItemInventory = async (order, item, { session, user } = {}) => {
   const requirements = await buildIngredientRequirements([item], { session });
   const stockError = validateIngredientRequirements(requirements);
@@ -513,6 +554,19 @@ export const createOrder = async (req, res) => {
       if (pax > 6 && pax <= 10 && orderTotal < config.sevenTenMin) {
         return res.status(400).json({ message: 'Order total does not meet minimum for 7-10 people' });
       }
+
+      const availableTable = await findAvailableReservationTable({
+        bookingDate: req.body.bookingDate,
+        bookingTime: req.body.bookingTime,
+        reservationPax: pax,
+        tableId: req.body.tableId,
+      });
+      if (!availableTable) {
+        return res.status(409).json({
+          message: 'Table is full for this date, time, and party size',
+        });
+      }
+      safeOrderBody.tableId = availableTable.table_Id;
     }
 
     const order = new Order({
