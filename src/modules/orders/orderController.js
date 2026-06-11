@@ -507,10 +507,10 @@ export const createOrder = async (req, res) => {
       if (pax <= 2 && orderTotal < config.oneTwoMin) {
         return res.status(400).json({ message: 'Order total does not meet minimum for 1-2 people' });
       }
-      if (pax <= 6 && orderTotal < config.threeSixMin) {
+      if (pax > 2 && pax <= 6 && orderTotal < config.threeSixMin) {
         return res.status(400).json({ message: 'Order total does not meet minimum for 3-6 people' });
       }
-      if (pax <= 10 && orderTotal < config.sevenTenMin) {
+      if (pax > 6 && pax <= 10 && orderTotal < config.sevenTenMin) {
         return res.status(400).json({ message: 'Order total does not meet minimum for 7-10 people' });
       }
     }
