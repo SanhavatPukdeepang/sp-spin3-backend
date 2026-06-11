@@ -150,6 +150,58 @@ export const buildIngredientRequirements = async (orderList = [], { session } = 
   return requirements;
 };
 
+const getMenuCookingTimeMap = async (orderLists = [], { session } = {}) => {
+  const menuIds = [
+    ...new Set(
+      orderLists
+        .flat()
+        .map((item) => item?.menu_id)
+        .filter(Boolean)
+        .map((menuId) => String(menuId)),
+    ),
+  ];
+
+  if (menuIds.length === 0) return new Map();
+
+  const menus = await Menu.find({ _id: { $in: menuIds } })
+    .select('cookingTime')
+    .session(session || null);
+
+  return new Map(menus.map((menu) => [String(menu._id), Number(menu.cookingTime || 0)]));
+};
+
+const applyMenuCookingTimesToItems = (orderList = [], cookingTimeByMenuId) =>
+  orderList.map((item) => {
+    const menuCookingTime = cookingTimeByMenuId.get(String(item?.menu_id || ''));
+    return menuCookingTime === undefined
+      ? item
+      : { ...item, cookingTime: menuCookingTime };
+  });
+
+const attachMenuCookingTimesToOrders = async (orders = []) => {
+  const cookingTimeByMenuId = await getMenuCookingTimeMap(
+    orders.map((order) => order?.orderList || []),
+  );
+
+  return orders.map((order) => {
+    const orderObject = typeof order.toObject === 'function' ? order.toObject() : { ...order };
+    return {
+      ...orderObject,
+      orderList: applyMenuCookingTimesToItems(orderObject.orderList || [], cookingTimeByMenuId),
+    };
+  });
+};
+
+const attachMenuCookingTimesToOrder = async (order) => {
+  const [orderWithCookingTimes] = await attachMenuCookingTimesToOrders(order ? [order] : []);
+  return orderWithCookingTimes || order;
+};
+
+const enrichOrderItemsWithMenuCookingTimes = async (orderList = [], { session } = {}) => {
+  const cookingTimeByMenuId = await getMenuCookingTimeMap([orderList], { session });
+  return applyMenuCookingTimesToItems(orderList, cookingTimeByMenuId);
+};
+
 export const validateIngredientRequirements = (requirements) => {
   if (Array.isArray(requirements?.errors) && requirements.errors.length > 0) {
     return requirements.errors[0];
@@ -482,7 +534,7 @@ export const getOrders = async (req, res) => {
         : {};
     const orders = await Order.find(query).sort({ createdAt: -1 });
     const reconciledOrders = await Promise.all(orders.map(reconcileOrderStatus));
-    res.json(reconciledOrders);
+    res.json(await attachMenuCookingTimesToOrders(reconciledOrders));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -495,7 +547,8 @@ export const getOrderById = async (req, res) => {
     if (!order) return res.status(404).json({ message: 'Order not found' });
     if (!canReadOrder(order, req.user)) return res.status(403).json({ message: 'Access denied' });
     const reconciledOrder = await reconcileOrderStatus(order);
-    res.json(await attachDeliveryRider(reconciledOrder));
+    const orderWithCookingTimes = await attachMenuCookingTimesToOrder(reconciledOrder);
+    res.json(await attachDeliveryRider(orderWithCookingTimes));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -517,12 +570,13 @@ export const createOrder = async (req, res) => {
     delete safeOrderBody.user_id;
     delete safeOrderBody.deliveredAt;
     delete safeOrderBody.evidenceImage;
-    const orderList = Array.isArray(req.body.orderList || req.body.items)
+    let orderList = Array.isArray(req.body.orderList || req.body.items)
       ? (req.body.orderList || req.body.items).map((item) => ({
           ...item,
           quantity: normalizeOrderItemQuantity(item.quantity),
         }))
       : [];
+    orderList = await enrichOrderItemsWithMenuCookingTimes(orderList);
 
     if (!isFutureReservationOrder(req.body)) {
       const requirements = await buildIngredientRequirements(orderList);
